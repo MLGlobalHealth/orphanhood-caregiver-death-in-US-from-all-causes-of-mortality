@@ -3,6 +3,7 @@ data/*
 scripts_death/*
 scripts_births/*
 
+.DS_Store
 **/.DS_Store
 
 # History files

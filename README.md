@@ -9,12 +9,15 @@
 - [Warrenty](#warranty)
 - [Citation](#cite)
 - [Acknowledgements](#acknowledgements)
-- [Funding](#funding)
 - [Quick Start](#quick-start)
   - [System Requirements](#system-requirements)
   - [Installation](#installation)
   - [Reproducing our Analyses](#reproducing-our-analyses)
-    - [Process for the data](#process-for-data)  
+    - [Process for the data](#process-for-data)
+      - [Mortality data](#mort-data)
+      - [Natality data](#birth-data)
+      - [Population size](#pop-data)
+
     - [Central Analyses](#cenctral-analyses)
       - [Race & ethnicity Analyses at the national level](#race-eth-analyses)
       - [State level Analyses](#state-analyses)
@@ -41,8 +44,7 @@ Please cite this work as
 Andrés Villaveces, Yu Chen, Sydney Tucker, Alexandra Blenkinsop Lucie Cluver, Lorraine Sherr, Linden Graves, Victor Kojey-Merle, Douhan Wang, Greta Massetti, Jan Losby, Francis Annor, Leandris Liburd, Rita Noonan, Charles A. Nelson, Seth Flaxman, H Juliette T Unwin, Susan Hillis, Oliver Ratmann; Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study
 
 ## Acknowledgements
-
-## Funding
+We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS, and Prof Chris Desmond for their comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/ hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the Moderna Charitable Foundation (to OR); the World Health Organisation (to SF); the Engineering and Physical Sciences Research Council through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy); the Imperial College London President’s PhD Scholarship fund to YC; Imperial College London Undergraduate Research Bursaries to LG and VKM; and London Mathematical Society Undergraduate Research Bursary to DW (URB-2023-86). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript. The findings and conclusions in this report are those of the author(s) and do not necessarily represent the official position of the Centers for Disease Control and Prevention.  
 
 ## Quick Start
 
@@ -63,19 +65,24 @@ source activate all_causes_deaths
 ```
 
 ### Reproducing our Analyses
-We provide mortality data at the group level in the `data/NCHS/death/Allcause_deaths_1983-2021_raw.RDS`. The raw data can be requested from [Mortality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data) and [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html); 
+All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. 
+#### Pre-processing steps
+##### Mortality data
+We pulled and preprocessed line-list mortality data from [National Bureau of Economic Research (NBER)](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data), which also disseminates NCHS data. Due to publicly unavailable from NBER after 2005, the U.S. state-specific mortality data were extracted from [CDC WONDER](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). 
+
+The raw data can be requested from [Mortality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data) and [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html); 
 We provide natality data at the group level in `data/NCHS/births/output/births_1968-2021.RDS`. The raw data can be requested from [Natality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data).
 
 We provide population data in `data/NCHS/fertility/pop_1968.rds` of the historical population data from 1968 at the individual level.
 Data in `data/data/pop/raw` contains adult population counts and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. Additionally, in folder `data/data/pop/raw`, sub-folder `raw_ten_new` includes the population sizes at the state level stratified by bridged-race and ethnicity exclusively for top 10 states in terms of orphanhood prevalence. 
 
-#### Pre-processing steps
-##### Mortality data
 If users want to preprocess the mortality data from the line-list dataset downloaded from NBER webpage (https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data). We suggested to run script in `scripts_death/get_deaths_nchs.R` to auto-download mortality dataset for each year from 1983. Then run the script `scripts_death/get_all_nchs_deaths_1983-2021.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
 Next, run the script `scripts_death/NCHS_mortality_resampling_poisson_with_comp_ratio.R` to map death counts based on individual ICD-9 or ICD-10 including the Poisson noise on mortality data, while harmonising the causes-of-death data before 1999 to the ICD-10 cause-of-death classification. 
 Users can pre-define the number of resampled mortality data sets in the `start.me.hpc.R` with the variable `args$sample.nb`.
 
 ##### Natality data
+We pulled and preprocessed line-list natality data from [National Bureau of Economic Research (NBER)](https://www.nber.org/research/data/vital-statistics-natality-birth-data), which also disseminates NCHS data. Due to publicly unavailable from NBER after 2005, the U.S. state-specific natality data were extrated from [CDC WONDER](https://wonder.cdc.gov/natality.html).
+
 The line-list natality data are downloaded from NBER webpage. 
 
 
