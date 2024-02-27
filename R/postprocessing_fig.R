@@ -7343,8 +7343,8 @@ prevalence_summary_orphanhood_bar <- function(dt.prev.orphans.age, dt.prev.orpha
 
   # combine estimates
   tmp <- rbind(
-               dt.prev.orphans.race[, grp := 'According by\nStandardized race & ethnicity'],
-               dt.prev.orphans.age[, grp := 'According by\nage'],
+               dt.prev.orphans.race[, grp := 'by standardized\nrace & ethnicity'],
+               dt.prev.orphans.age[, grp := 'by age'],
                dt.prev.all[, grp := 'All causes'], use.names = T, fill = T)
   tmp <- tmp[!is.na(stat)]
 
@@ -11354,9 +11354,13 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
   {
     if (grepl('incidence', pl.type))
     {
-      y.lab <- paste0('Rate of children newly experiencing ', contrib.name,  ' death per 100 children in 2021')
+      y.lab <- paste0('Orphanhood incidence rate per 100 children in 2021')
+
+      # y.lab <- paste0('Rate of children newly experiencing ', contrib.name,  ' death per 100 children in 2021')
     }else{
-      y.lab <- paste0('Rate of all children currently experiencing ', contrib.name,  ' death per 100 children in 2021')
+      y.lab <- paste0('Orphanhood prevalence rate per 100 children in 2021')
+
+      # y.lab <- paste0('Rate of all children currently experiencing ', contrib.name,  ' death per 100 children in 2021')
     }
 
     pd <- pd[, value := value * 1e5/pop.c]
@@ -11371,9 +11375,9 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
   {
     if (grepl('incidence', pl.type))
     {
-      y.lab <- paste0('Number of children newly experiencing ', contrib.name,  ' death in 2021')
+      y.lab <- paste0('Orphanhood incidence in 2021')
     }else{
-      y.lab <- paste0('Cumulative burden of ', contrib.name,  ' death in 2021')
+      y.lab <- paste0('Orphanhood prevalence in 2021')
     }
 
     pd <- pd[, value := value]
@@ -11418,17 +11422,6 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
   # pd <- merge(pd, tp, by = c('year', 'state', 'race.eth', 'cause.name'), all.x = T)
 
   setkey(pd, state.rank.id, causes.state.id, year)
-
-  # get the cut value: for that state, how far did we get to 50% contribution in the US
-  if (0)
-  {
-    cum.value <- sum(dt.rank$value)/2 - dt.rank[nt == 1, cum.value]
-    if (cum.value < 0)
-    {
-      tmp <- dt.rank[nt == 1]$state.rank.id
-      cum.value <- sum(dt.rank$value)/2 - dt.rank[state.rank.id == (tmp - 1), cum.value]
-    }
-  }
 
   # set the colour for the cause.name
   pd.cn <- unique(pd$cause.name)
@@ -11617,7 +11610,7 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
     labs(
       fill = paste0('Cause')
       # fill = paste0('Causes of children experiencing\n', contrib.name, ' death')
-         , pattern = paste0('Primary cause')
+         , pattern = paste0('Leading cause')
     ) +
     theme(legend.position = "none",
           # panel.grid.major = element_blank(),
