@@ -12322,14 +12322,23 @@ orphans_age_dist_plot_race <- function(dist.age, prj.dir)
   setkey(dist.age, re.name, sex)
   dist.age[, fct.name := paste0(re.name, '\n', sex)]
   rnk <- unique(dist.age$fct.name)
-
+  show.age <- rep('', 18)
+  show.age[seq(0, 17, 5)+1] <- seq(0, 17, 5)
   p <- ggplot(dist.age[race.eth != 'Others'], aes(x = child.age, y = orphans.age.prop, col = race.eth)) +
     geom_line() +
     facet_wrap(.~ factor(fct.name, levels = rnk),
                ncol = 4) +
     theme_bw() +
-    ylab('Age composition of children experiencing orphanhood') +
-    xlab('Age of children (years)') +
+    ylab('Percent contribution of 1-year age bands to children experiencing orphanhood') +
+    xlab('Age of children by 1-year age band') +
+    scale_y_continuous(limits = c(0, NA),
+                       labels = scales::percent,
+                       expand = expansion(mult = c(0, 0.01))) +
+    scale_x_continuous(limits = c(0, 17),
+                       breaks = seq(0, 17, 1),
+                       labels = show.age,
+                       expand = expansion(mult = c(0, 0.01))) +
+
     labs(
       col = 'Standardized race & ethnicity'
     ) +
@@ -12407,13 +12416,24 @@ orphans_age_dist_plot_state <- function(dist.age, prj.dir)
   dist.age[, fct.name := paste0(re.name, '\n', sex)]
   rnk <- unique(dist.age$fct.name)
 
+  show.age <- rep('', 18)
+  show.age[seq(0, 17, 5)+1] <- seq(0, 17, 5)
+
   p <- ggplot(dist.age, aes(x = child.age, y = orphans.age.prop, col = state)) +
     geom_line() +
     facet_wrap(.~ factor(fct.name, levels = rnk),
                ncol = 4) +
     theme_bw() +
-    ylab('Age composition of children experiencing orphanhood') +
-    xlab('Age of children (years)') +
+    ylab('Percent contribution of 1-year age bands to children experiencing orphanhood') +
+    xlab('Age of children by 1-year age band') +
+    scale_y_continuous(limits = c(0, NA),
+                       labels = scales::percent,
+                       expand = expansion(mult = c(0, 0.01))) +
+    scale_x_continuous(limits = c(0, 17),
+                       breaks = seq(0, 17, 1),
+                       labels = show.age,
+                       expand = expansion(mult = c(0, 0.01))) +
+
     labs(
       col = 'U.S. state'
     ) +
@@ -12434,8 +12454,8 @@ orphans_age_dist_plot_state <- function(dist.age, prj.dir)
       strip.background = element_blank()
     )
   p
-  ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_age_children_grandp_age_30plus_cause_state.png')), p,  w = 20, h = 15, dpi = 310, limitsize = FALSE)
-  ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_age_children_grandp_age_30plus_cause_state.pdf')), p,  w = 20, h = 15, dpi = 310, limitsize = FALSE)
+  ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_age_children_grandp_age_30plus_cause_state.png')), p,  w = 20, h = 16, dpi = 310, limitsize = FALSE)
+  ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_age_children_grandp_age_30plus_cause_state.pdf')), p,  w = 20, h = 16, dpi = 310, limitsize = FALSE)
 
 
 }

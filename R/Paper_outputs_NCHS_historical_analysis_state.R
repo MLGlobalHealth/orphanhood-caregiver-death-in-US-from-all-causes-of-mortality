@@ -25,10 +25,8 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 }else{
   args <- list()
   args$prj.dir <- here::here()
-  args$v.name <- 'V1025'
-  # args$v.name <- 'V1005'
-  # args$v.name <- 'V1007'
-  args$race.type <- 'national_race_fert_stable_fntwk_mort_'
+  args$v.name <- 'V0214'
+  args$race.type <- 'national_race_fert_stable_poisson_'
 }
 args$in.dir <- file.path(args$prj.dir, 'data')
 
@@ -160,7 +158,7 @@ if (1)
 {
   # get the incidence data
   cat('Runnning for Figure 3 ... \n')
-  pb <- plot_ranking_prevalence_orphanhood_rates_us_state_combine_all(show.nb, pl.tab, par = 'parents', dt.inc.m, dt.prev.m)
+  pb <- plot_ranking_prevalence_orphanhood_rates_us_state_combine_all(show.nb, pl.tab, par = 'parents', dt.inc.m[loss.type == 'orphans'], dt.prev.m[loss.type == 'orphans'])
   p.rate <- pb$p.rate
   p.num <- pb$p.num
 

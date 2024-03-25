@@ -90,12 +90,6 @@ if (!dir.exists(file.path(args$prj.dir, 'results', paste0('orphans_', v.name))))
   dir.create(file.path(args$prj.dir, 'results', paste0('orphans_', v.name)))
 }
 
-# folder for the excess deaths analysis
-# if (!dir.exists(file.path(args$prj.dir, 'results', paste0('excess_', type.input))))
-# {
-#   dir.create(file.path(args$prj.dir, 'results', paste0('excess_', type.input)))
-# }
-
 args$rep <- 0
 str(args)
 
@@ -177,8 +171,6 @@ for (test.yr.input in 1983:2021)
 
   cat(sprintf("Processing number of orphans ...\n"))
   # orphans in a single one script: calculate_orphans
-  # v.name <- 'v0626'
-  # v.name <- 'v0706'
   # update to use age distribution of children losing parents older than 30, by race, cause....
   set.seed(rep.nb)
   process_nb_orphans_table_state_national_all_year_v2(args$in.dir, args$prj.dir, args$yr.input, type.input, d.grandp.path, rep.nb, d.death, d.deaths.pre, args$sel.nb, args$if.smooth, v.name, folder.name)
@@ -197,7 +189,7 @@ cat("Done for saving caregivers loss results ...\n")
 race.type <- 'national_race_'
 smy.type.input <- paste0('CI_', race.type, args$v.name)
 pry.cn <- get_leading_cause_national()
-# get_grandp_loss_age_child(args$prj.dir, pry.cn$raw, smy.type.input, race.type, args$rep.nb)
+get_grandp_loss_age_child(args$prj.dir, pry.cn$raw, smy.type.input, race.type, args$rep.nb)
 # cat("Done for updating grandparent caregivers loss by age of childre ...\n")
 
 # Clean repo ----
@@ -209,8 +201,6 @@ unlink(file.path(args$prj.dir, 'results', paste0(type.input, '_', v.name)), recu
 unlink(file.path(args$prj.dir, 'results', paste0('orphans_', v.name)), recursive = TRUE)
 #
 cat("Renaming the updated results to initial_result folder ...\n")
-# file.rename(file.path(args$prj.dir, 'results', smy.type.input, 'result'),
-#             file.path(args$prj.dir, 'results', smy.type.input, 'initial_result'))
 if (args$sample.type == 'rep_mortality_poisson')
 {
   file.rename(file.path(args$prj.dir, 'results', smy.type.input),
@@ -218,7 +208,6 @@ if (args$sample.type == 'rep_mortality_poisson')
 }
 #
 cat("Deleting the processed data to save space ...\n")
-# if (rep.nb > 1)
 {
   unlink(file.path(args$in.dir, 'data', 'fertility/*.csv'))
   unlink(file.path(args$in.dir, 'data', folder.name), recursive = TRUE)
