@@ -116,18 +116,18 @@ To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poi
 1. Sensitivity in mortality data and live births data
 To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp.R`.
 
-3. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
+2. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
 
 To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sensitivity_analysis.R`.
 
-4. Sensitivity in national-level orphanhood estimates to potentially correlated fertility rates
+3. Sensitivity in national-level orphanhood estimates to potentially correlated fertility rates
 
 To process the analysis, set `race_eth_level_rep_resample_poisson_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates.R`.
 
-5. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
+4. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
 
 To process the analysis and get the figure in the paper, please run script `R/misc_sensitivity_analysis.R`.
 
-6. Sensitivity in national-level caregiver loss estimates to assumption on historic number of grandparent caregivers
+5. Sensitivity in national-level caregiver loss estimates to assumption on historic number of grandparent caregivers
 
 To process the analysis and get the figure in the paper, please run script `R/un_older_ppl.R`.

@@ -3,7 +3,7 @@ data/*
 scripts_death/deprecated/*
 scripts_births/deprecated/*
 
-scripts/deprecated/*
+R/deprecated/*
 
 
 .idea/*
