@@ -1,8 +1,14 @@
 results/*
 data/*
-scripts_death/*
-scripts_births/*
+scripts_death/deprecated/*
+scripts_births/deprecated/*
 
+scripts/deprecated/*
+
+
+.idea/*
+
+# Mac files
 .DS_Store
 **/.DS_Store
 
@@ -16,6 +22,8 @@ scripts_births/*
 
 # User-specific files
 .Ruserdata
+.Rproj.user
+.Rprofile
 
 # Example code in package build process
 *-Ex.R
