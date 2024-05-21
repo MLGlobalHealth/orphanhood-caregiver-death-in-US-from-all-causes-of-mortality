@@ -24,6 +24,7 @@ R/deprecated/*
 .Ruserdata
 .Rproj.user
 .Rprofile
+.Rhistory
 
 # Example code in package build process
 *-Ex.R

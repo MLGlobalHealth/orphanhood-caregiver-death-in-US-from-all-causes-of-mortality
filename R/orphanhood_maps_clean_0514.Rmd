@@ -1,0 +1,396 @@
+---
+title: "Final Orphanhood Maps"
+output: html_document
+date: "2023-10-10"
+---
+
+```{r setup, include = FALSE}
+knitr::opts_knit$set(
+  collapse = TRUE,
+  comment = "#>",
+  root.dir = '.'
+)
+```
+
+```{r, include=TRUE, eval=TRUE, echo=FALSE, warning=FALSE, message=FALSE, tidy=TRUE}
+require(knitr)
+require(kableExtra)
+require(ggplot2)
+require(ggpubr)
+require(gridExtra)
+require(albersusa)
+require(data.table)
+require(tidyr)
+require(dplyr)
+require(tidyverse)
+require(leaflet)
+require(maps)
+require(geojsonio)
+require(DT)
+require(plotly)
+library(ggsci)
+require(geofacet)
+require(RColorBrewer)
+require(scales)
+# install.packages('Cairo')
+# devtools::install_github("dahtah/imager")
+# Error for the X11
+# https://www.xquartz.org/
+# install.packages('imager')
+library(imager)
+library(RCurl)
+library(openxlsx)
+
+#install.packages('remotes')
+library(remotes)
+remotes::install_github("hrbrmstr/albersusa")
+library(sf)
+
+```
+
+```{r, include=FALSE, eval=FALSE, echo=FALSE, warning=FALSE, message=FALSE, tidy=TRUE}
+require(rmarkdown)
+# rmarkdown::render('US_all_causes_deaths_website.Rmd')
+```
+
+
+### Spatial distribution of US orphanhood in 2021
+
+#### U.S. Orphanhood Incidence in 2021 by State
+
+```{r, include=TRUE, out.width="100%", fig.show='hold', fig.align='center', echo=FALSE,warning=FALSE}
+# updated data on Feb 1419
+args <- list()
+args$prj.dir <- here::here()
+summary.type.input <- "summary_output_main_V0214"
+orphanhood <- data.table(read.xlsx(file.path(args$prj.dir, 'results', summary.type.input, "DataMap3.xlsx"))) %>% mutate(Incidence.rate.per.100.children = Incidence.rate, First.ranked.cause.of.incidence.rate = `First.ranked.cause.(Incidence)`, Prevalence.rate.per.100.children = Prevalence.rate, First.ranked.cause.of.prevalence.rate = `First.ranked.cause.(Prevalence)`)
+
+orphanhood <- orphanhood %>% select(Incidence.rate.per.100.children, First.ranked.cause.of.incidence.rate, State) %>% mutate(First.ranked.cause = trimws(First.ranked.cause.of.incidence.rate)) %>% mutate(Contribution.of.first.ranked.cause='1') # %>% mutate(Incidence= Incidence.rate.per.100.children/100)
+
+# Asked Sydney to download this one.
+# packages are not available from Oct 2023 in R... 
+# suppressMessages({
+#     spdf <- rmapshaper::ms_simplify(albersusa::usa_sf(), keep = 0.1)
+# })
+
+spdf.raw <- (readRDS(file.path(args$prj.dir, 'data', 'maps', 'download_spdf.rds')))
+
+str(spdf.raw)
+# 
+
+
+states <- 
+    geojson_read( 
+        x = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json"
+        , what = "sp"
+    )
+
+us_states_centres <- read.csv(file.path(args$prj.dir, 'data', 'maps', "us_states_centres.csv"))
+
+us_states_centres$W <- - us_states_centres$W
+# Change Alaska and Hawaii coordinates to match those on the map
+us_states_centres$W[2] <- -112
+us_states_centres$N[2] <- 27.25
+us_states_centres$W[12] <- -103.8255
+us_states_centres$N[12] <- 27.0451
+
+epsg2163 <- leafletCRS(
+  crsClass = "L.Proj.CRS",
+  code = "EPSG:2163",
+  proj4def = "+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs",
+  resolutions = 2^(16:7))
+
+spdf <- merge(spdf.raw,subset(orphanhood,select=c('State','Incidence.rate.per.100.children', 'First.ranked.cause')),by.x='name',by.y='State',all=T)
+spdf <- merge(spdf,us_states_centres, by.x='name', by.y='State', all=T) # , 'Incidence', 'Contribution.of.first.ranked.cause'
+spdf <- subset(spdf,!is.na(name))
+
+iconmap <- function(cause){
+  if(cause == "Diseases of heart"){
+    file.path(args$prj.dir, 'data','maps',"heart.png")
+  }
+  else if (cause == "Unintentional injuries"){
+    file.path(args$prj.dir, 'data','maps',"unintentional_injury.png")
+  }
+  else if (cause == "COVID-19"){
+    file.path(args$prj.dir, 'data','maps',"covid.png")
+  }
+  else if (cause == "Drug overdose"){
+    file.path(args$prj.dir, 'data','maps',"drug.png")
+  }
+  else if (cause == "Malignant neoplasms"){
+    file.path(args$prj.dir, 'data','maps',"neoplasm.png")
+  }
+  else if (cause == "Chronic liver disease and cirrhosis"){
+    file.path(args$prj.dir, 'data','maps',"liver.png")
+  }
+  else if (cause == "Suicide"){
+    file.path(args$prj.dir, 'data','maps',"suicide.png")
+  }
+}
+
+icondim <- 25
+
+causeIcons <- icons(
+  iconUrl = unlist(lapply(spdf$First.ranked.cause, iconmap)),
+  iconWidth=icondim, iconHeight=icondim,
+  iconAnchorX=icondim/2, iconAnchorY=icondim/2
+)
+
+image_file <- "~/Documents/US_orphanhood_paper.maps/US_all_causes_deaths/figures/heart.png" #"heart_test.png" # "figures/heart.png"
+image_file <- file.path(args$prj.dir, 'data','maps',"heart.png") #"heart_test.png") # "figures/heart.png")
+txt.heart <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"suicide.png")
+txt.suicide <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"liver.png")
+txt.liver <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"covid.png")
+txt.covid <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"drug.png")
+txt.drug <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"neoplasm.png")
+txt.neoplasm <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+image_file <- file.path(args$prj.dir, 'data','maps',"unintentional_injury.png")
+txt.injury <- RCurl::base64Encode(readBin(image_file, "raw", file.info(image_file)[1, "size"]), "txt")
+
+html_legend <- paste0("<b>Leading Cause of Parental<br>Death (# of states)</b><br>",
+                      "<img src='", paste('data:image/png;base64', txt.drug, sep=','), "' width='15' height='15'> Drug overdose (33)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.covid, sep=','), "' width='15' height='15'> COVID-19 (8)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.injury, sep=','), "' width='15' height='15'> Unintentional Injuries<br>Excluding Drug Overdose (3)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.heart, sep=','), "' width='15' height='15'> Diseases of Heart (3)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.neoplasm, sep=','), "' width='15' height='15'> Malignant Neoplasms (2)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.liver, sep=','), "' width='15' height='15'> Chronic Liver Disease<br>and Cirrhosis (1)<br/>")
+                                          #  "<img src='", paste('data:image/png;base64', txt.injury, sep=','), "' width='15' height='15'> Unintentional Injuries (4)<br/>",
+                    #  "<img src='", paste('data:image/png;base64', txt.neoplasm, sep=','), "' width='15' height='15'> Malignant Neoplasms (2)<br/>",
+                    #  "<img src='", paste('data:image/png;base64', txt.liver, sep=','), "' width='15' height='15'> Chronic Liver Disease<br>and Cirrhosis (1)<br/>")
+
+bins <- c(.36,0.5,0.6, 0.7,.89)
+pal <- colorBin(c("#FFFF40","#FF8000", "#FF0000", "#BD0026"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins,na.color = "grey")
+
+pal_noNA <- colorBin(c("#FFF176","#FF8000", "#FF0000", "#B71C1C"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA) # D50000  "#FF0000", "#BD0026"
+
+pal_peach <- colorBin(c("#fde0c5","#f8b58b", "#f2855d", "#D32F2F"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA) #"#D32F2F" "#eb4a40"
+
+#fde0c5,#facba6,#f8b58b,#f59e72,#f2855d,#ef6a4c,#eb4a40
+
+pal_purple <- colorBin(c("#ffc6c4","#e38191", "#ad466c", "#672044"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+pal_orange <- colorBin(c("#FFCC80","#FFA726", "#F57C00", "#E65100"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+pal_red <- colorBin(c( "#f5b78e","#F44336", "#E53935", "#D50000"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+# "#ecda9a","#efc47e","#f3ad6a","#f7945d","#f97b57","#f66356","#ee4d5a"
+# 
+# "#f6d2a9","#f5b78e","#f19c7c","#ea8171","#dd686c","#ca5268","#b13f64"
+
+red2 <- colorBin(c( "#FFAB91","#FF7043", "#FF0000", "#B71C1C"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA) 
+
+fire_orange <- colorBin(c( "#FFAB91","#FF7043", "#FF3D00", "#DD2C00"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA) # "#FF6D00"
+
+bright_orange <- colorBin(c( "#FFCC80","#FFA726", "#FF6D00", "#DD2C00"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)  # "#E65100" "#F57C00"
+
+purple <- colorBin(c( "#ff6f4b","#fd4c55", "#c1246b", "#a11477"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)  # "#E65100" "#F57C00"
+
+plasma <- colorBin(c("#0D0887FF", "#9C179EFF", "#ED7953FF", "#F0F921FF"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)  # "#E65100" "#F57C00"
+# "#0D0887FF" "#42049EFF" "#6A00A8FF" "#900DA4FF" "#B12A90FF" "#CC4678FF" "#E16462FF" "#F1844BFF"
+#  "#FCA636FF" "#FCCE25FF" "#F0F921FF"
+
+magma <- colorBin(c("#F8765CFF","#D3436EFF","#982D80FF", "#5F187FFF"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+# "#000004FF" "#231151FF" "#5F187FFF" "#982D80FF" "#D3436EFF" "#F8765CFF" "#FEBA80FF" "#FCFDBFFF"
+
+
+
+# viridis::plasma(11)
+
+labels=paste0("<b>State :</b> ", spdf$name,
+              "<br><b>Incidence rate per 100 children:</b> ", spdf$Incidence.rate.per.100.children,
+              "<br><b>Total incidence:</b> ", spdf$Incidence,
+              "<br><b>Leading Cause of parental death in 2021:</b> ", spdf$First.ranked.cause) %>%
+  lapply(htmltools::HTML)
+
+
+
+backg <- htmltools::tags$style(".leaflet-container { background: white; }" )
+
+# DEATHS1 <- sf::st_as_sf(spdf)
+leaflet(spdf, options = leafletOptions(crs = epsg2163)) %>%
+  setView(-96, 37.8, 3) %>%
+  addProviderTiles("MapBox", options = providerTileOptions(
+    id = "mapbox.light",
+    accessToken = Sys.getenv('MAPBOX_ACCESS_TOKEN'))) %>%
+  addPolygons(
+    fillColor = ~magma(orphanhood$Incidence.rate.per.100.children),
+    weight = .5,
+    opacity = 1.0,
+    color = "white",
+    dashArray = "3",
+    fillOpacity = 1.0,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "white",
+      dashArray = "",
+      fillOpacity = 1.0,
+      bringToFront = TRUE),
+    label = labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "15px",
+      direction = "auto")) %>%
+  addLegend(pal = magma, values = round(orphanhood$Incidence.rate.per.100.children, 2), labFormat = labelFormat(suffix = "%"), opacity = 1.0, title = "Orphanhood Incidence <br> per 100 Children",
+    position = "topright"
+  ) %>%
+  addMarkers(lat=spdf$N, lng=spdf$W, icon=causeIcons) %>%
+  addControl(html = html_legend, position = "bottomright")  %>%
+htmlwidgets::prependContent(backg)
+
+```
+
+#### U.S. Orphanhood Prevalence in 2021 by State
+
+```{r, include=TRUE, out.width="100%", fig.show='hold', fig.align='center', echo=FALSE,warning=FALSE}
+
+#library(albersusa)
+#install.packages('albersusa')
+
+# updated data on Feb 14
+# args <- list()
+# args$prj.dir <- here::here()
+# summary.type.input <- "summary_output_main_V0214"
+orphanhood <- data.table(read.xlsx(file.path(args$prj.dir, 'results', summary.type.input, "DataMap3.xlsx"))) %>% mutate(Incidence.rate.per.100.children = Incidence.rate, First.ranked.cause.of.incidence.rate = `First.ranked.cause.(Incidence)`, Prevalence.rate.per.100.children = Prevalence.rate, First.ranked.cause.of.prevalence.rate = `First.ranked.cause.(Prevalence)`)
+
+orphanhood <- orphanhood %>% select(Prevalence.rate.per.100.children, First.ranked.cause.of.prevalence.rate, State) %>% mutate(First.ranked.cause = trimws(First.ranked.cause.of.prevalence.rate)) %>% mutate(Contribution.of.first.ranked.cause='1') # %>% mutate(Incidence= Incidence.rate.per.100.children/100)
+
+
+#library(sf)
+#system.file("extdata/composite_us_states.geojson.gz", package="albersusa")
+
+# suppressMessages({
+#     spdf <- rmapshaper::ms_simplify(albersusa::usa_sf(), keep = 0.1)
+# })
+
+spdf <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'maps', 'Treasure_for_Yu.incidence.csv')))
+
+states <- 
+    geojson_read( 
+        x = "https://raw.githubusercontent.com/PublicaMundi/MappingAPI/master/data/geojson/us-states.json"
+        , what = "sp"
+    )
+
+us_states_centres <- read.csv(file.path(args$prj.dir, 'data', 'maps', "us_states_centres.csv"))
+us_states_centres$W <- - us_states_centres$W
+# Change Alaska and Hawaii coordinates to match those on the map
+us_states_centres$W[2] <- -112
+us_states_centres$N[2] <- 27.25
+us_states_centres$W[12] <- -103.8255
+us_states_centres$N[12] <- 27.0451
+
+epsg2163 <- leafletCRS(
+  crsClass = "L.Proj.CRS",
+  code = "EPSG:2163",
+  proj4def = "+proj=laea +lat_0=45 +lon_0=-100 +x_0=0 +y_0=0 +a=6370997 +b=6370997 +units=m +no_defs",
+  resolutions = 2^(16:7))
+
+spdf <- merge(spdf,subset(orphanhood,select=c('State','Prevalence.rate.per.100.children', 'First.ranked.cause.of.prevalence.rate')),by.x='name',by.y='State',all=T)
+spdf <- merge(spdf,us_states_centres, by.x='name', by.y='State', all=T)
+spdf <- subset(spdf,!is.na(name))
+
+icondim <- 25
+
+iconmap <- function(cause){
+  if(cause == "Diseases of heart"){
+    file.path(args$prj.dir, 'data','maps',"heart.png")
+  }
+  else if (cause == "Unintentional injuries"){
+    file.path(args$prj.dir, 'data','maps',"unintentional_injury.png")
+  }
+  else if (cause == "COVID-19"){
+    file.path(args$prj.dir, 'data','maps',"covid.png")
+  }
+  else if (cause == "Drug overdose"){
+    file.path(args$prj.dir, 'data','maps',"drug.png")
+  }
+  else if (cause == "Malignant neoplasms"){
+    file.path(args$prj.dir, 'data','maps',"neoplasm.png")
+  }
+  else if (cause == "Chronic liver disease and cirrhosis"){
+    file.path(args$prj.dir, 'data','maps',"liver.png")
+  }
+  else if (cause == "Suicide"){
+    file.path(args$prj.dir, 'data','maps',"suicide.png")
+  }
+}
+
+causeIcons <- icons(
+  iconUrl = unlist(lapply(spdf$First.ranked.cause, iconmap)),
+  iconWidth=icondim, iconHeight=icondim,
+  iconAnchorX=icondim/2, iconAnchorY=icondim/2
+)
+
+html_legend <- paste0("<b>Leading Cause of Parental<br>Death (# of states)</b><br>",
+                      "<img src='", paste('data:image/png;base64', txt.drug, sep=','), "' width='15' height='15'> Drug overdose (29)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.injury, sep=','), "' width='15' height='15'> Unintentional Injuries<br>Excluding Drug Overdose (12)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.neoplasm, sep=','), "' width='15' height='15'> Malignant Neoplasms (5)<br/>",
+                      "<img src='", paste('data:image/png;base64', txt.heart, sep=','), "' width='15' height='15'> Diseases of Heart (4)<br/>")
+                      #"<img src='", paste('data:image/png;base64', txt.suicide, sep=','), "' width='15' height='15'> Suicide (1)<br/>")
+               
+# if 100 and 5 categories 
+bins <- c(2.24, 3.0, 3.75, 4.5, 5.0) # , "#7F0000", "#FFFF40"
+pal <- colorBin(c("#FF8000", "#FF0000", "#BD0026", "#7F0000" ), domain = orphanhood$Prevalence.rate.per.100.children, bins = bins,na.color = "grey")
+prev <- colorBin(c("#FFB74D", "#EF6C00", "#BD0026", "#7F0000"), domain = orphanhood$Prevalence.rate.per.100.children, bins = bins, na.color = NA)  # "#FF0000",
+
+prev <- colorBin(c("#FF9E80", "#FF6E40", "#FF3D00", "#DD2C00"), domain = orphanhood$Prevalence.rate.per.100.children, bins = bins, na.color = NA)
+
+
+prev <- colorBin(c("#FFF176","#FF8000", "#FF0000", "#B71C1C"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+prev <- colorBin(c("#FFB74D","#FF8000", "#FF0000", "#b0180a"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+prev <- colorBin(c("#fab520","#f87614", "#e42309", "#b0180a"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+prev_toomuchred <- colorBin(c("#ff6600","#FF3300", "#990000", "#660000"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+prev <- colorBin(c("#ffcc00","#FF9900", "#FF6600", "red"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+prev <- colorBin(c("#ffcc00","#FF9900", "#FF3300", "#FF0000"), domain = orphanhood$Incidence.rate.per.100.children, bins = bins, na.color = NA)
+
+
+  
+labels=paste0("<b>State :</b> ", spdf$name,
+              "<br><b>Prevalence rate per 100 children:</b> ", formatC(spdf$Prevalence.rate.per.100.children, digits=0, format="f", big.mark=","),
+              "<br><b>Total prevalence:</b> ", spdf$Prevalence,
+              "<br><b>Leading Cause of parental death in 2021:</b> ", spdf$First.ranked.cause.1) %>%
+  lapply(htmltools::HTML)
+
+leaflet(spdf, options = leafletOptions(crs = epsg2163)) %>%
+  setView(-96, 37.8, 3) %>%
+  #setView(-96, 47, 3) %>%
+  addProviderTiles("MapBox", options = providerTileOptions(
+    id = "mapbox.light",
+    accessToken = Sys.getenv('MAPBOX_ACCESS_TOKEN'))) %>%
+  addPolygons(
+    fillColor = ~prev(orphanhood$Prevalence.rate.per.100.children),
+    weight = .5,
+    opacity = 1,
+    color = "white",
+    dashArray = "3",
+    fillOpacity = 1.0,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "white",
+      dashArray = "",
+      fillOpacity = 1.0,
+      bringToFront = TRUE),
+    label = labels,
+    labelOptions = labelOptions(
+      style = list("font-weight" = "normal", padding = "3px 8px"),
+      textsize = "15px",
+      direction = "auto")) %>%
+  addLegend(pal = prev, values = orphanhood$Prevalence.rate.per.100.children, labFormat = labelFormat(suffix = "%"), opacity = 0.7, title = "Orphanhood Prevalence <br> per 100 children",
+    position = "topright"
+  ) %>%
+  addMarkers(lat=spdf$N, lng=spdf$W, icon=causeIcons) %>%
+  addControl(html = html_legend, position = "bottomright")  %>%
+htmlwidgets::prependContent(backg)
+
+
+
+```

@@ -74,7 +74,7 @@ get_ci_rate_format <- function(tab.incid.num, type)
   setnames(tab.incid.num, 'variable', 'loss')
   rnk.var <- unique(tab.incid.num$loss)
   tmp <- as.data.table(reshape2::melt(tab.incid.num, id = c('loss', 'rep.nb', 'race.eth')))
-  tmp <- tmp[value != '/']
+  tmp <- tmp[value != '-']
   tmp <- tmp[,
              list(
                output = quantile(as.numeric(value), p = pds.quantiles, na.rm = TRUE),
@@ -84,7 +84,7 @@ get_ci_rate_format <- function(tab.incid.num, type)
 
   tmp[grepl('rate', variable), value_m := gsub(' ', '', format(output, digits = 1, nsmall = 1))]
   tmp[grepl('rate', variable), value_m := ifelse(as.numeric(value_m) > 0, paste0('+', gsub(' ', '', value_m), '%'),
-                                                 paste0(value_m))]
+                                                 paste0(value_m, '%'))]
 
   if (type == 'number')
   {
@@ -288,6 +288,59 @@ process_summary_number_ratio_rate_change_with_ci_table <- function(tab.incid)
   return(tab.incid)
 }
 
+# New S2
+process_summary_number_ratio_rate_change_with_ci_table_sex <- function(tab.incid)
+{
+  pds.quantiles <- c(.025,.5,.975)
+  pds.quantilelabels <- c('CL','M','CU')
+
+  # process the number and rate table
+  rnk.var <- c('orphans', 'mother', 'father')
+  tab.incid[, variable := factor(variable, levels = rnk.var)]
+  setkey(tab.incid)
+  tab.incid.num.rate <- process_summary_number_rate_change_with_ci_table(tab.incid)
+
+  # table for rate ratio
+  tab.incid.ratio <- as.data.table(reshape2::dcast(tab.incid, year+rep.nb~variable, value.var = 'rate' ))
+  tab.incid.ratio[, `father` := round(`father`/`mother`, 2)]
+  tab.incid.ratio[, `mother` := round(`mother`/`mother`, 2)]
+
+  set(tab.incid.ratio, NULL, 'orphans', NULL)
+  tab.incid.ratio <- as.data.table(reshape2::melt(tab.incid.ratio, id = c('year', 'rep.nb') ))
+  tmp <- tab.incid.ratio[,
+                         list(
+                           output = quantile(as.numeric(value), p = pds.quantiles, na.rm = TRUE),
+                           stat = pds.quantilelabels),
+                         by = c('year', 'variable')
+  ]
+  tmp[, value_m := gsub(' ', '', format(output, digits = 2, nsmall = 2))]
+
+  pds <- dcast.data.table(tmp, year+variable~stat, value.var = 'value_m')
+
+  pds[, value := paste0(M, ' (', CL, ', ', CU, ')')]
+  set(pds, NULL, c('CL', 'CU', 'M'), NULL)
+
+  tab.incid.ratio <- as.data.table(reshape2::dcast(pds,
+                                                   factor(variable, levels = rnk.var) ~
+                                                     factor(year, levels = c('2000', '2005', '2010', '2015', '2019', 'change.rate1',
+                                                                             '2020', '2021', 'change.rate3', 'change.rate2')),
+                                                   value.var = 'value'))
+
+  tab.incid.ratio[, change.rate1 := '-']
+  tab.incid.ratio[, change.rate2 := '-']
+  tab.incid.ratio[, change.rate3 := '-']
+
+  tab.incid.ratio[, type := 'Incidence rate ratio']
+  colnames(tab.incid.ratio)[1] <- 'variable'
+  tab.incid.ratio[, race.eth := 'All']
+
+  colnames(tab.incid.num.rate)[1] <- 'variable'
+
+  tab.incid <- rbind(tab.incid.num.rate, tab.incid.ratio)
+  tab.incid <- tab.incid[, list(variable, `2000`, `2005`, `2010`, `2015`, `2019`, change.rate1, `2020`, `2021`, change.rate3, change.rate2)]
+
+  return(tab.incid)
+}
 # S5
 # 1031, update to use NH Asian as a ref race
 process_summary_number_ratio_rate_race_change_with_ci_table <- function(tab.incid)
@@ -346,6 +399,80 @@ process_summary_number_ratio_rate_race_change_with_ci_table <- function(tab.inci
   return(tab.incid)
 }
 
+# New email table
+process_summary_number_rate_cause_race_change_with_ci_table <- function(tab.incid)
+{
+  pds.quantiles <- c(.025,.5,.975)
+  pds.quantilelabels <- c('CL','M','CU')
+
+  # process the number and rate table
+  tab.incid.num.rate <- process_summary_number_rate_change_with_ci_table(tab.incid)
+
+  tab.out <- tab.incid.num.rate[type == 'Rate', list(loss,`2000`, `2021`, change.rate2)]
+  tab.out[, race.eth :=  unlist(lapply(strsplit(loss, "_"),'[' ,1)) ]
+  tab.out[, loss.type :=  unlist(lapply(strsplit(loss, "_"),'[' ,3)) ]
+  tab.out[, cause.name :=  unlist(lapply(strsplit(loss, "_"),'[' ,2)) ]
+  tmp1 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = '2000'))
+  setnames(tmp1, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_2000', 'maternal_orphan_rate_2000', 'orphan_rate_2000'))
+  tmp2 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = '2021'))
+  setnames(tmp2, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_2021', 'maternal_orphan_rate_2021', 'orphan_rate_2021'))
+  tmp3 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = 'change.rate2'))
+  setnames(tmp3, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_change_rate', 'maternal_orphan_rate_change_rate', 'orphan_rate_change_rate'))
+
+
+  tab <- merge(
+    merge(tmp1, tmp2, by = c('race.eth', 'cause.name')),
+          tmp3, by = c('race.eth', 'cause.name'))
+
+  # update the cause names
+  tab <- update_cause_name(tab)
+  tab <- update_mental_cause_name_pd(tab)
+  unique(tab$cause.name)
+  rnk.cn <- c("Unintentional injuries\nexcluding drug overdose"
+              , "Homicide\nexcluding drug overdose"
+              , "COVID-19"
+              , "Cerebrovascular diseases"
+              , "Chronic liver disease and cirrhosis"
+              , "Chronic lower respiratory diseases"
+              , "Diseases of heart"
+              , "Drug overdose"
+              , "Suicide\nexcluding drug overdose"
+              , "Malignant neoplasms"
+  )
+  rnk.cn <- c("COVID-19"
+              , "Drug overdose"
+
+              , "Unintentional injuries\nexcluding drug overdose"
+              , "Suicide\nexcluding drug overdose"
+              , "Homicide\nexcluding drug overdose"
+              , "Diseases of heart"
+              , "Malignant neoplasms"
+              , "Chronic liver disease and cirrhosis"
+              , "Cerebrovascular diseases"
+              , "Chronic lower respiratory diseases"
+  )
+  tab[, cause.name := factor(cause.name, levels = rnk.cn)]
+
+  tab[, race.eth := factor(race.eth,
+                                 levels = c(
+                                            "Non-Hispanic American Indian or Alaska Native",
+                                            "Non-Hispanic Asian",
+                                            "Non-Hispanic Black",
+                                            "Hispanic",
+                                            "Non-Hispanic White"))]
+
+  setkey(tab, race.eth, cause.name)
+
+  tab <- tab[, list(race.eth,cause.name,orphan_rate_2000,orphan_rate_2021,orphan_rate_change_rate,
+                    maternal_orphan_rate_2000,maternal_orphan_rate_2021,maternal_orphan_rate_change_rate,
+                    paternal_orphan_rate_2000,paternal_orphan_rate_2021,paternal_orphan_rate_change_rate)]
+
+  return(tab)
+}
+
 process_summary_number_ratio_rate_race_change_with_ci_table_ref_white <- function(tab.incid)
 {
   pds.quantiles <- c(.025,.5,.975)
@@ -400,6 +527,7 @@ process_summary_number_ratio_rate_race_change_with_ci_table_ref_white <- functio
 
   return(tab.incid)
 }
+
 # Tab2 state ----
 # get the incidence & preval data
 get_preval_incid_state <- function(do.all.state)
@@ -541,3 +669,120 @@ process_summary_number_rate_state_table <- function(dt.inc.m, stat.input)
   colnames(dt.tmp.rate)[2:4] <- paste0(colnames(dt.tmp.rate)[2:4], '.rate.', stat.input)
   return(list(dt.num = dt.tmp.num, dt.rate = dt.tmp.rate))
 }
+
+
+# State level table formatting
+format_state_table_cause_ui <- function(dt.out, var)
+{
+  dt.preval1 <- dt.out[grepl(var, variable),
+                       list(state,loss.M,rate.M,
+                            `Cause 1`,
+                            `Cause 2`)]
+  dt.preval2 <- dt.out[grepl(var, variable),
+                       list( value.ui,rate.ui,
+                             `Contribution 1`,
+                             `Contribution 2`)]
+
+  dt.preval1[, id := seq_len(nrow(dt.preval1))]
+  dt.preval1[, id := id * 10]
+  dt.preval2[, id := seq_len(nrow(dt.preval2))]
+  dt.preval2[, id := id * 10 + 2]
+  setnames(dt.preval2, c('Contribution 1', 'Contribution 2'), c('Cause 1', 'Cause 2'))
+  setnames(dt.preval2, c('value.ui', 'rate.ui'), c('loss.M', 'rate.M'))
+  dt.preval <- rbind(dt.preval1, dt.preval2, use.names = T, fill = T)
+
+  # split the long cause name
+  tmp1 <- dt.preval[grepl('\n', `Cause 1`), list(`Cause 1`, id)]
+  tmp1[, id := id + 1]
+  tmp1[, `Cause 1` := 'excluding drug overdose']
+  dt.preval <- rbind(dt.preval, tmp1, use.names = T, fill = T)
+
+  # only select the rows that we need to split for cause 2
+  tmp1 <- dt.preval[grepl('\n', `Cause 2`) & !(grepl('\n', `Cause 1`)), list(`Cause 2`, id)]
+  tmp1[, id := id + 1]
+  tmp1[, `Cause 2` := 'excluding drug overdose']
+  dt.preval <- rbind(dt.preval, tmp1, use.names = T, fill = T)
+
+  # if we need to split for both cause names
+  sel.id <- dt.preval[grepl('\n', `Cause 2`) & (grepl('\n', `Cause 1`))]$id
+  dt.preval[id %in% (sel.id + 1), `Cause 2` := 'excluding drug overdose']
+
+  dt.preval[grepl('excluding drug ov', `Cause 1`),  `Cause 1` := unlist(lapply(strsplit(`Cause 1`, "\nexcluding "),'[' ,1))]
+  dt.preval[grepl('excluding drug ov', `Cause 2`),  `Cause 2` := unlist(lapply(strsplit(`Cause 2`, "\nexcluding "),'[' ,1))]
+
+  setkey(dt.preval, id)
+  # set(dt.preval, NULL, 'id', NULL)
+  # check
+  stopifnot(length(unique(dt.preval$id)) == length((dt.preval$id)))
+  return(dt.preval)
+}
+
+process_summary_number_rate_state_all_loss_type_table <- function(dt.inc.m.parent, stat.input)
+{
+  dt.tmp <- dt.inc.m.parent[year == 2021]
+  if (nrow(dt.tmp[loss.type == 'all']) > 0)
+  {
+    dt.tmp[loss.type == 'all', loss.type := 'cg.loss']
+  }
+  # c.pop.state <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'data', 'pop', 'state_usa_children_population_all.csv')))
+  dt.tmp[, rate := value/population*1e5]
+  dt.tmp[, rate := rate/10/100]
+  dt.tmp <- dt.tmp[, list(value = (sum(value, na.rm = T)),
+                          rate = (sum(rate, na.rm = T))),
+                   by = c('state', 'loss.type')]
+  # format
+  dt.tmp[, loss := gsub(' ', '', format(as.numeric(round(value)), big.mark = ","))]
+  dt.tmp[, rate := round(rate, 2)]
+
+  dt.tmp[, rate := gsub(' ', '', format(as.numeric(rate), digits = 2, nsmall = 2))]
+  dt.tmp[, rate := as.character(rate)]
+
+  dt.tmp.num <- as.data.table(reshape2::dcast(dt.tmp, state~loss.type, value.var = 'loss'))
+  dt.tmp.rate <- as.data.table(reshape2::dcast(dt.tmp, state~loss.type, value.var = 'rate'))
+  colnames(dt.tmp.num)[2:ncol(dt.tmp.num)] <- paste0(colnames(dt.tmp.num)[2:ncol(dt.tmp.num)], '.', stat.input)
+  colnames(dt.tmp.rate)[2:ncol(dt.tmp.rate)] <- paste0(colnames(dt.tmp.rate)[2:ncol(dt.tmp.rate)], '.', stat.input)
+  return(list(dt.num = dt.tmp.num, dt.rate = dt.tmp.rate))
+}
+
+# STable 7 & 8
+get_table_state_all_types_cg_loss_summary_num_rate <- function(dt.inc.m.parent, dt.inc.cl.parent, dt.inc.cu.parent)
+{
+  tmp <- process_summary_number_rate_state_all_loss_type_table(dt.inc.m.parent, stat = 'M')
+  tmp.cl <- process_summary_number_rate_state_all_loss_type_table(dt.inc.cl.parent, stat = 'CL')
+  tmp.cu <- process_summary_number_rate_state_all_loss_type_table(dt.inc.cu.parent, stat = 'CU')
+
+  # number with ci
+  tmp.num <- merge(merge(tmp$dt.num, tmp.cl$dt.num, by = 'state', all = T),
+                   tmp.cu$dt.num, by = 'state', all = T)
+  # str(tmp.num)
+
+  format_table_state_type_cg_loss <- function(tmp.num)
+  {
+    setkey(tmp.num, state)
+    tmp.num[, id := seq_len(nrow(tmp.num))*10]
+    tmp.m <- tmp.num[, list(state,mother.M,father.M,orphans.M, grandp.loss.M,cg.loss.M,id)]
+    tmp.num[, mother.M := paste0('(', mother.CL, ', ', mother.CU, ')')]
+    tmp.num[, father.M := paste0('(', father.CL, ', ',father.CU, ')')]
+    tmp.num[, orphans.M := paste0('(', orphans.CL, ', ', orphans.CU, ')')]
+    tmp.num[, grandp.loss.M := paste0('(', grandp.loss.CL, ',', grandp.loss.CU, ')')]
+    tmp.num[, cg.loss.M := paste0('(', cg.loss.CL, ', ', cg.loss.CU, ')')]
+    tmp.ci <- tmp.num[, list(mother.M,father.M,orphans.M, grandp.loss.M,cg.loss.M,id)]
+    tmp.ci[, id := id + 1]
+    tmp.num <- rbind(tmp.m, tmp.ci, use.names = T, fill = T)
+    setkey(tmp.num, id)
+    return(tmp.num)
+  }
+  tmp.num <- format_table_state_type_cg_loss(tmp.num)
+
+  # rate with ci
+  tmp.rate <- merge(merge(tmp$dt.rate, tmp.cl$dt.rate, by = 'state', all = T),
+                    tmp.cu$dt.rate, by = 'state', all = T)
+  tmp.rate <- format_table_state_type_cg_loss(tmp.rate)
+
+  tmp.incid <- merge(tmp.num ,tmp.rate, by = c('id', 'state'), all = T)
+
+  tmp.incid <- tmp.incid[, list(state,mother.M.x,mother.M.y,father.M.x,father.M.y,orphans.M.x,orphans.M.y,grandp.loss.M.x,grandp.loss.M.y,cg.loss.M.x,cg.loss.M.y)]
+
+  return(tmp.incid)
+}
+
