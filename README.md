@@ -13,7 +13,8 @@
   - [System Requirements](#system-requirements)
   - [Installation](#installation)
   - [Reproducing our Analyses](#reproducing-our-analyses)
-    - [Process for the data](#process-for-data)
+  - [Data source](#data-source)
+    - [Preprocessing steps](#preprocessing-steps)
       - [Mortality data](#mortality-data)
       - [Natality data](#natality-data)
       - [Population size](#population-data)
@@ -30,7 +31,7 @@ Imperial makes no representation or warranty about the accuracy or completeness 
 ## Citation
 Please cite this work as 
 
-Andrés Villaveces, Yu Chen, Sydney Tucker, Alexandra Blenkinsop, Lucie Cluver, Lorraine Sherr, Jan L. Losby, Linden Graves, Rita Noonan, Francis Annor, Victor Kojey-Merle, Douhan Wang, Greta Massetti, Laura Rawlins, Charles A. Nelson, H. Juliette T. Unwin, Seth Flaxman, Susan Hillis, Oliver Ratmann; Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study
+Villaveces, A., Chen, Y., Tucker, S., Blenkinsop, A., Cluver, L., Sherr, L., ... & Ratmann, O. (2024). Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study. medRxiv, 2024-03.
 
 ## Acknowledgements
 We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS especially Dr. Robert Anderson for his helpful suggestions on interpreting and classifying disease groups and race groups using existing NCHS data. We also thank Prof. Chris Desmond for his comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the Moderna Charitable Foundation (to OR); the World Health Organisation (to SF); the Engineering and Physical Sciences Research Council (EPSRC) through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy); the Imperial College London President’s PhD Scholarship fund to YC; Imperial College London Undergraduate Research Bursaries to LG and VKM; and London Mathematical Society Undergraduate Research Bursary to DW (URB-2023-86). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript. The findings and conclusions in this report are those of the author(s) and do not necessarily represent the official position of the Centers for Disease Control and Prevention. 
@@ -38,7 +39,7 @@ We thank the Global Reference Group for Children In Crisis, reviewers at the CDC
 ## Quick Start
 
 ### System Requirements
-- [R](https://www.r-project.org/) version >= 4.1.2
+- [R](https://www.r-project.org/) version >= 3.5.1
 
 ### Installation 
 Please use the following ```bash``` script to build a conda virtual environment and install all R dependencies:
@@ -55,14 +56,27 @@ source activate all_causes_deaths
 
 ### Reproducing our Analyses
 All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. 
-#### Pre-processing steps of historical data
+
+### Data source
+| Data        | Timing | Demographics       | Link  | Notes|
+| ------------- |:-------------: |:-------------:|:-------------:| -----:|
+| Mortality data | Yearly data from 1983 to 2021 | 1-year age bands; Sex; Race; Ethnicity; ICD-9 code (1983-1998) or ICD-10 code (1999-2021); State|[National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm)| Geographic information (U.S. state) is available until 2005; Instruction to auto-download the datasets |
+| Mortality data * | Yearly data from 1999 to 2021 | 5-year age bands; Sex; Race; Ethnicity; ICD-10 code; State|[CDC WONDER](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm)| Counts < 10 are suppressed |
+| ------------- |:-------------: |:-------------:|:-------------:| -----:|
+
+#### Data downloading instruction
+
+
+
+
+#### Preprocessing steps
 ##### Mortality data
 We pulled and preprocessed line-list mortality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific mortality data were extracted from [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). 
 
 The raw data can be requested from [Mortality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data) and [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). Mortality data extracted from CDC WONDER are provided in `/data/CDC/ICD-10_113_Cause`
 
 
-To preprocess the mortality data from the line-list dataset online, we suggested the following steps:
+To preprocess the mortality data from the line-list NCHS dataset online, we suggested the following steps:
 
 1. run script `/scripts_death/get_deaths_nchs.R` to auto-download mortality dataset for each year from 1983. 
 2. run script `/scripts_death/get_all_nchs_deaths_1983-2021.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
@@ -82,7 +96,7 @@ If users want to preprocess the mortality data from the line-list dataset online
 2. run script `/scripts_births/process_births_all_years.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
 
 ##### Population size
-We pulled historical population size data from [Surveillance Epidemiology and End Results Program (SEER) interactive databases](https://seer.cancer.gov/popdata/singleages.html). The population data are provided in `/data/NCHS/fertility/pop_1968.rds`. Additionally, we extracted population size data from [CDC WONDER interactive page](https://wonder.cdc.gov/bridged-race-population.html) from 1990. Data in `data/data/pop/raw` contains adult population counts and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. 
+We pulled historical population size data from [Surveillance Epidemiology and End Results Program (SEER) interactive databases](https://seer.cancer.gov/popdata/singleages.html). The population data are provided in `/data/NCHS/fertility/pop_1968.rds`. Additionally, we extracted population size data from [CDC WONDER interactive page](https://wonder.cdc.gov/bridged-race-population.html) from 1990. Data in `/data/data/pop/raw` contains adult population counts and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. 
 
 Other data sources were provided in the supplementary materials. 
 
@@ -97,23 +111,29 @@ Rscript start.me.hpc.R
 ```
 
 1. Resampling mortality data
+
 To process the bootstrap resampled mortality data, in the input arguments block, set `resample_mort_data_poisson_with_comp_ratio = 1` in HPC submission job script. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. 
 
 2. Resampling caregiver counts in household data
+
 To process the bootstrap resampled grandparent data in the houehold, set `args$resampled_grandp_data = 1` in the input arguments block in HPC submission job script. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. 
 
 3. Orphanhood and all caregiver loss estimation at the national level by standardlized race & ethnicity
+
 To process the analysis, set `args$uncertainty_race_eth_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_national_race_poisson = 1` in HPC. 
 
 4. Orphanhood and all caregiver loss estimation at the state level
+
 To process the analysis, set `args$uncertainty_state_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_poisson = 1` in HPC. 
 
 5. Orphanhood and all caregiver loss estimation at the state level by race and ethnicity
+
 To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson = 1` in HPC. 
 
 
 ##### Sensitivity Analyses
 1. Sensitivity in mortality data and live births data
+
 To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp.R`.
 
 2. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
@@ -126,8 +146,8 @@ To process the analysis, set `race_eth_level_rep_resample_poisson_adj_fert_{star
 
 4. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
 
-To process the analysis and get the figure in the paper, please run script `R/misc_sensitivity_analysis.R`.
+To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis.R`.
 
 5. Sensitivity in national-level caregiver loss estimates to assumption on historic number of grandparent caregivers
 
-To process the analysis and get the figure in the paper, please run script `R/un_older_ppl.R`.
+To process the analysis and get the figure in the paper, please run script `/R/un_older_ppl.R`.
