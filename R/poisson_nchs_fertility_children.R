@@ -2029,6 +2029,7 @@ process_usa_states_national_race_birth_fertility_all_year_poisson = function(in.
 # used ----
 process_usa_states_national_race_stable_fertility_imput_all_year_poisson = function(in.dir, cur.yr, type.input, rep.nb)#
 {
+  # keep it same in each iteration
   if (!file.exists(
     file.path(in.dir, 'data','fertility', paste0('national_race', '_', 'nchs_fertility_f_complete.csv'))
   ))
@@ -2592,6 +2593,7 @@ process_number_children_usa_state_national_all_year_poisson <- function(in.dir, 
   {
     process_usa_states_national_race_birth_fertility_all_year_poisson(in.dir, cur.yr, type.input, rep.nb)
   }
+  # used
   if (grepl('national_race_fert_stable', type.input))
   {
     process_usa_states_national_race_stable_fertility_imput_all_year_poisson(in.dir, cur.yr, type.input, rep.nb)

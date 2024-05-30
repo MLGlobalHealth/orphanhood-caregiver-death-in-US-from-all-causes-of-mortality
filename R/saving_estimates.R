@@ -3260,7 +3260,6 @@ get_quantiles_estimates_historical_results <- function(prj.dir, do, type.input, 
   }
 
   # only get the estimates for mother, father, grandmother and grandfather
-  # TODO: RMEOVE double_orphans
   do.all.ci <- do.all.ci[, list(year,cause.name,state,race.eth,
                                 child.age,mother,father,double_orphans,grandmother,grandfather,rep.nb)]
   # tmp <- do.all.ci[, list(year,cause.name,state,race.eth,child.age,mother,father)]
