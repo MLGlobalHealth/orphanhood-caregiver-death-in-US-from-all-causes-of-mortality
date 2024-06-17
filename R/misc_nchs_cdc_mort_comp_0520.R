@@ -135,16 +135,34 @@ unique(tmpp$fac.name)
 tmpp.tab <- tmpp[, list(variable,year,value,fac.name)]
 tmpp.tab[, value := gsub(' ', '', format(as.numeric(round(value)), big.mark = ","))]
 tmpp.tab <- as.data.table(reshape2::dcast(tmpp.tab[, list(variable,year,value,fac.name)],
-                                         variable+year~fac.name, value.var = 'value'))
+                                         year+ variable~fac.name, value.var = 'value'))
 
 setkey(tmpp.tab, year)
 tmpp.tab[, variable := ifelse(grepl('NCHS', variable), 'NCHS', 'CDC WONDER')]
 tmpp.tab[, 1:10]
 tmpp.tab[, c(1:2, 11:16)]
+setnames(tmpp.tab
+         , 'variable', 'data_source')
 
 # print out 2 separated table
 
+# save to file
+openxlsx::write.xlsx(tmpp.tab[, 1:10], file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp1.xlsx'),
+                     rowNames = F)
+openxlsx::write.xlsx(tmpp.tab[, c(1:2, 11:16)], file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp2.xlsx'),
+                     rowNames = F)
 
+# add midrule for each year to separate...
+colnames(tmpp.tab)
+tpp <- unique(tmpp.tab[, list(year)])
+tpp[, data_source := 'Z-']
+tmpp.tab <- rbind(tmpp.tab, tpp, use.names = T, fill = T)
+setkey(tmpp.tab, year)
+tmpp.tab[data_source == 'Z-', year := NA]
+tmpp.tab[data_source == 'Z-', data_source := "\\midrule"]
+tmpp.tab[grepl('CDC', data_source), year := NA]
+capture.output(print(xtable::xtable(tmpp.tab[, 1:10]), include.rownames=FALSE), file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp1.txt'))
+capture.output(print(xtable::xtable(tmpp.tab[, c(1:2, 17:18, 15:16, 11:12, 13:14)]), include.rownames=FALSE), file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp2.txt'))
 
 
 #

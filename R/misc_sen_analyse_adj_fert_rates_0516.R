@@ -4,6 +4,8 @@
 # add an adjustment on the year back to live
 # if parents are close to death (unhealthy), the fertility rates would be smaller than the
 # real ones
+
+# EDF 9b-c
 require(data.table)
 require(ggplot2)
 # we assume adjustments on the fertility rates from a logistic model

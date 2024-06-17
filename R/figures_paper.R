@@ -155,6 +155,34 @@ generate_fig1e <- function(do.inc.total.tab1, deaths.total, p1, out.dir, if.rnk)
   pd.tmp[, state := stat]
   pd.tmp[, race.eth := 'All']
 
+  if (0)
+  {
+    tmp.dth <- unique(deaths.total)
+    tmp.dth[, year.t := '2021']
+    tmp <- tmp.dth[stat == 'M']
+    tmp[ order(-deaths)]
+
+    cn <- c("COVID-19", "Drug poisonings", "Accidents", "Intentional self-harm",
+            "Assault", "Diseases of heart", "Malignant neoplasms" ,
+            "Cerebrovascular diseases", "Chronic lower respiratory diseases"
+            )
+    tmp.dth[!(cause.name %in% cn), cause.name := 'Others']
+
+    tmp.dth <- tmp.dth[, list(deaths = sum(deaths, na.rm = T)), by = c('cause.name', 'year.t', 'stat')]
+    tmp.t <- tmp.dth[, list(deaths.t = sum(deaths, na.rm = T)), by = c('year.t', 'stat')]
+    tmp.dth <- merge(tmp.dth, tmp.t, by = c('year.t', 'stat'))
+    tmp.dth[, prop.dth := deaths/deaths.t*100]
+    tmp.dth[, prop.dth := round(prop.dth, 2)]
+    tmp.dth[, prop.dth := format(prop.dth, digits = 2, nsmall = 2)]
+    tmp.dth[, prop.dth := paste0(prop.dth, '%')]
+    tmp.dth[, rank := -deaths]
+    setkey(tmp.dth, rank)
+
+
+
+  }
+
+
   tmp <- get_contributions_orphans_deaths(pd.tmp, pd.tmp, show.nb)
   dt.death <- tmp$dt.death
   setkey(dt.death, year, causes.deaths.id)
@@ -191,7 +219,86 @@ generate_fig1e <- function(do.inc.total.tab1, deaths.total, p1, out.dir, if.rnk)
   # cat('Done for key figure1 ...\n')
 }
 
+generate_fig1e_test <- function(do.inc.total.tab1, deaths.total, p1, out.dir, if.rnk)
+{
+  show.nb <- 5
+  # output <- generate_fig(do.inc.total.tab1, do.prev.total.tab, c.pop.all)
 
+  # B parental loss contribution comparison
+  pd.tmp <- do.inc.total.tab1[year %in% c(2021)]
+  pd.tmp[, loss := output]
+  # pd.tmp <- merge(pd.tmp, deaths.total, by = c('cause.name' ,'stat'), all = T)
+  pd.tmp[, state := stat]
+  pd.tmp[, race.eth := 'All']
+
+  if (1)
+  {
+    tmp.dth <- unique(deaths.total)
+    tmp.dth[, year.t := '2021']
+    tmp <- tmp.dth[stat == 'M']
+    tmp[ order(-deaths)]
+
+    cn <- c("COVID-19", "Drug poisonings", "Accidents", "Intentional self-harm",
+            "Assault", "Diseases of heart", "Malignant neoplasms" ,
+            "Cerebrovascular diseases", "Chronic lower respiratory diseases"
+    )
+    tmp.dth[!(cause.name %in% cn), cause.name := 'Others']
+
+    tmp.dth <- tmp.dth[, list(deaths = sum(deaths, na.rm = T)), by = c('cause.name', 'year.t', 'stat')]
+    tmp.t <- tmp.dth[, list(deaths.t = sum(deaths, na.rm = T)), by = c('year.t', 'stat')]
+    tmp.dth <- merge(tmp.dth, tmp.t, by = c('year.t', 'stat'))
+    tmp.dth[, prop.dth := deaths/deaths.t*100]
+    tmp.dth[, prop.dth := round(prop.dth, 2)]
+    tmp.dth[, prop.dth := format(prop.dth, digits = 2, nsmall = 2)]
+    tmp.dth[, prop.dth := paste0(prop.dth, '%')]
+    tmp.dth[, rank := -deaths]
+    setkey(tmp.dth, rank)
+    tmp.dth[cause.name != 'Others', rank.dth := seq_len(nrow(tmp.dth)-1)]
+    tmp.dth[cause.name == 'Others', rank.dth := nrow(tmp.dth)]
+    tmp.dth[, rank.dth := paste0('#', rank.dth)]
+    tmp.dth[cause.name == 'Others', rank.dth := '-']
+    tmp.cg[, id := seq_len(nrow(tmp.cg))]
+    tmp <- merge(tmp.cg, tmp.dth, by = 'cause.name')
+    setkey(tmp, id)
+
+  }
+
+
+  # tmp <- get_contributions_orphans_deaths(pd.tmp, pd.tmp, show.nb)
+  dt.death <- tmp$dt.death
+  setkey(dt.death, year, causes.deaths.id)
+  dt.orphan <- tmp$dt.orphan
+  setkey(dt.orphan, year, causes.orphans.id)
+
+  tmp <- merge(dt.orphan, dt.death, by = c('state', 'year', 'race.eth', 'cause.name',
+                                           'caregiver.deaths', 'caregiver.loss'), all = T)
+
+  set(tmp, NULL, c('caregiver.deaths', 'caregiver.loss', 'loss', 'deaths'), NULL)
+  tmp <- as.data.table(reshape2::melt(tmp,
+                                      id = c('state', 'year', 'race.eth', 'cause.name',
+                                             'causes.orphans.id', 'causes.deaths.id')))
+
+  setkey(tmp, year, causes.orphans.id , causes.deaths.id)
+  tmp[, cause.name := gsub('\\\n.*', '', cause.name)]
+  tmp[, cause.name := gsub('\\*', '', cause.name)]
+
+  tab.e <- copy(tmp)
+  p.contrib <- plot_contribution_orphan_deaths_national_bars_vsplit_ci(pl.tab, tmp, par = 'parents', args$prj.dir, title.input = 'parental-loss_deaths-2021', type.input)
+
+  p.contrib <- p.contrib +
+    theme(legend.title.align = 0.5) +
+
+    facet_grid(.~ 'Contribution to deaths                             Contribution to orphanhood')
+  p <- ggpubr::ggarrange(p1, p.contrib, nrow = 2,
+                         labels = c('','e'),
+                         widths = c(1,1), heights = c(2,1)
+  )
+  ggsave(file.path(out.dir, paste0('FIG1_National_US_total_incid-preval_nb-rate_death-contrib_orphans_rnk', as.integer(if.rnk), '.png')), p,  w = 16, h = 16, dpi = 310, limitsize = FALSE)
+  ggsave(file.path(out.dir, paste0('FIG1_National_US_total_incid-preval_nb-rate_death-contrib_orphans_rnk', as.integer(if.rnk), '.pdf')), p,  w = 16, h = 16, dpi = 310, limitsize = FALSE)
+
+  return(tab.e = tab.e)
+  # cat('Done for key figure1 ...\n')
+}
 generate_edf5 <- function(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk)
 {
     show.nb = 5

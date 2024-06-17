@@ -12,7 +12,7 @@ require(tidyverse)
 
 # User defined args -----
 tmp <- Sys.info()
-if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
+if (grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 {
   option_list <- list(
     optparse::make_option(c("-v", "--verbose"), action = "store_true", default = FALSE,
@@ -72,9 +72,9 @@ str(args)
 # d.grandp <- ((file.path(d.grandp.path,'ACS_househould.csv')))
 
 # debug: if the datasets were copied to the HPC correctly
-str(readRDS(mort.dir))
-str(readRDS(pop.dir))
-str(readRDS(birth.dir))
+# str(readRDS(mort.dir))
+# str(readRDS(pop.dir))
+# str(readRDS(birth.dir))
 
 # estimate the orphanhood by national level
 if (!dir.exists(args$out.dir))

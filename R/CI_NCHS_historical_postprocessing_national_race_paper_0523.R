@@ -30,7 +30,7 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
   args$race.type <- 'national_race_fert_stable_poisson_'
   args$race.type <- 'national_race_fert_stable_poisson_sampling_rnk_'
 }
-args$v.name <- 'V0523'
+args$v.name <- 'V0526'
 args$in.dir <- file.path(args$prj.dir, 'data')
 
 # TODO: specify
@@ -378,19 +378,55 @@ if (1)
 
   # Table1----
   # incidence
+  args$out.dir <- '/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/results/summary_output_main_V0523_lock_v1'
+
   do.inc.total.raw <- do.inc[, list(value = sum(value, na.rm = T)),
                              by = c('year','rep.nb', 'variable')]
 
   #prevalence
   do.prev.total.raw <- do.prev[, list(value = sum(value, na.rm = T)),
                                by = c('year','rep.nb', 'loss.type')]
+  # args$out.dir <- '/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/results/summary_output_main_V0523_lock_v1'
+  # load(file = file.path(args$out.dir, paste0('data_table1.RData')))
 
   generate_table1(do.inc.total.raw, do.prev.total.raw, c.pop.all, args$out.dir, if.rnk)
   cat('Done for Table1 ...\n')
   cat('Saving data for Table1 to file ...\n')
   save(do.inc.total.raw, do.prev.total.raw, c.pop.all, file = file.path(args$out.dir, paste0('data_table1.RData')))
 
-  # Figure1----
+  # Total including grandp.loss
+  unique(do.inc$variable)
+  do.inc.total <- do.inc.total.raw[year == 2021,
+                                   list(
+                                     output = quantile(value, p = pds.quantiles, na.rm = TRUE),
+                                     stat = pds.quantilelabels),
+                                   by = c('year', 'variable')
+  ]
+  do.inc.total <- merge(do.inc.total, c.pop.all, by = 'year')
+
+  do.inc.total[, rate := output/population*1e2]
+  do.inc.total[, rate := format(round(rate, 2), digits = 2, nsmall = 2)]
+  do.inc.total[, output:= gsub(' ', '', format(round(output), big.mark = ","))]
+
+
+  # preval
+  #prevalence
+  do.prev.total.tab <- do.prev.total.raw[year == 2021,
+                                         list(
+                                           value = quantile(value, p = pds.quantiles, na.rm = TRUE),
+                                           stat = pds.quantilelabels),
+                                         by = c( 'loss.type', 'year')
+  ]
+
+
+  do.prev.total.tab <- merge(do.prev.total.tab, c.pop.all, by = 'year')
+
+  do.prev.total.tab[, rate := value/population*1e2]
+  do.prev.total.tab[, rate := format(round(rate, 2), digits = 2, nsmall = 2)]
+  do.prev.total.tab[, value:= gsub(' ', '', format(round(value), big.mark = ","))]
+
+
+    # Figure1----
   # Figure 1 and EDF5
   unique(do.inc$variable)
   do.inc.total.raw <- do.inc[variable %in% c('orphans', 'grandp.loss'), list(value = sum(value, na.rm = T)),
@@ -424,12 +460,40 @@ if (1)
                                            stat = pds.quantilelabels),
                                          by = c('cause.name', 'loss.type', 'year')
   ]
+
+
+
+
   # Figure 1
+  # load(file = file.path(args$out.dir, paste0('data_figure1.RData')))
+
   tmp <- generate_fig1(do.inc.total.tab1, do.prev.total.tab[loss.type == 'orphans'], c.pop.all)
 
   tmp2 <- generate_fig1e(do.inc.total.tab1, deaths.total, tmp$p, args$out.dir, if.rnk)
   cat('Saving data for Figure1 to file ...\n')
   save(do.inc.total.tab1, do.prev.total.tab, deaths.total, c.pop.all, file = file.path(args$out.dir, paste0('data_figure1.RData')))
+
+  # Data for paper
+  # load(file = file.path(args$out.dir, paste0('data_figure1.RData')))
+  unique(do.prev.total.tab$cause.name)
+  tmp <- do.prev.total.tab[grepl('self-harm', cause.name) & stat == 'M' & loss.type == 'orphans']
+  tmp <- merge(tmp, c.pop.all, by = c('year'))
+  tmp[, value := value/population*1e2]
+  ggplot(tmp, aes(x = year, y = value))+
+    geom_line() +
+    geom_point()
+
+  tmp <- do.prev.total.tab[ cause.name %in% c('Assault', 'Accidents') & stat == 'M' & loss.type == 'orphans']
+  tmp <- merge(tmp, c.pop.all, by = c('year'))
+  tmp[, value := value/population*1e2]
+  tmp <- tmp[, list(output = sum(value,na.rm = T)), by = c('year')]
+  ggplot(tmp, aes(x = year, y = output))+
+    geom_line() +
+    geom_point()
+
+  # For Table S4. 5
+
+
 
   # Table to support Figure 1 ----
   tmp$p <- NULL
@@ -458,11 +522,14 @@ if (1)
   generate_table_for_fig5_1e5_children(tmp, args$out.dir, if.rnk)
 
 
-
   # STable3 ----
   # get the orphanhood by cause.name only
   do.inc.total <- do.inc.total.tab1[year == '2021']
   set(do.inc.total, NULL, 'variable', NULL)
+
+  # args$out.dir <- '/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/results/summary_output_main_V0523_lock_v1'
+  # load(file = file.path(args$out.dir, paste0('data_tableS3.RData')))
+
   generate_tableS3(do.inc.total, deaths.total, args$out.dir, if.rnk)
   cat('Saving data for TableS3 to file ...\n')
   save(do.inc.total, deaths.total, file = file.path(args$out.dir, paste0('data_tableS3.RData')))
@@ -481,6 +548,8 @@ if (1)
   #prevalence
   do.prev.total.raw <- do.prev[loss.type == 'orphans', list(value = sum(value, na.rm = T)),
                                by = c('year','rep.nb', 'loss.type', 'child.age.group')]
+
+  # load(file = file.path(args$out.dir, paste0('data_tableS9.RData')))
 
   generate_tableS9(do.inc.total.raw, do.prev.total.raw, c.pop.age, args$out.dir, if.rnk)
   # cat('Done for Tab S9 ...\n')
@@ -511,6 +580,7 @@ if (1)
   #prevalence
   do.prev.total.raw <- do.prev[loss.type %in% c('mother', 'father', 'orphans'), list(value = sum(value, na.rm = T)),
                                by = c('year','rep.nb', 'loss.type')]
+  # load(file = file.path(args$out.dir, paste0('data_tableS10.RData')))
 
   generate_tableS10(do.inc.total.raw, do.prev.total.raw, c.pop.all, args$out.dir, if.rnk)
   cat('Saving data for Table S10 to file ...\n')
@@ -540,6 +610,8 @@ if (1)
   do.prev.total.raw <- do.prev[loss.type %in% c( 'orphans'), list(value = sum(value, na.rm = T)),
                                by = c('year','rep.nb', 'race.eth')]
 
+  # load(file = file.path(args$out.dir, paste0('data_tableS11.RData')))
+
   generate_tableS11(do.inc.total.raw, do.prev.total.raw, c.pop.race, args$out.dir, if.rnk)
   cat('Saving data for Table S11 to file ...\n')
   save(do.inc.total.raw, do.prev.total.raw, c.pop.race, file = file.path(args$out.dir, paste0('data_tableS11.RData')))
@@ -568,6 +640,7 @@ if (1)
                                       stat = pds.quantilelabels),
                                     by = c('year')
   ]
+  # load(file = file.path(args$out.dir, paste0('data_fig2a.RData')))
 
   p2a <- generate_fig2a(dt.prev.orphans.sex.save, dt.prev.orphans.age.save, dt.prev.orphans.race.save, do.prev.race, c.pop.all)
   cat('Done Fig2a...\n')
@@ -629,7 +702,7 @@ if (1)
   # Table S12 ----
   do.inc.total.raw <- do.inc[variable %in% c('father', 'mother', 'orphans'), list(value = sum(value, na.rm = T)),
                              by = c('year','rep.nb', 'cause.name', 'variable', 'race.eth')]
-  # saveRDS(do.inc.total.raw, )
+  # load(file = file.path(args$out.dir, paste0('data_tableS12.RData')))
   generate_tableS12(do.inc.total.raw, args$out.dir, if.rnk)
   generate_tableS12_1e5_children(do.inc.total.raw, args$out.dir, if.rnk)
   cat('Saving data for TableS12 to file ...\n')

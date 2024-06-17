@@ -82,7 +82,7 @@ get_ci_rate_format <- function(tab.incid.num, type)
              by = c('variable', 'loss', 'race.eth')
   ]
 
-  tmp[grepl('rate', variable), value_m := gsub(' ', '', format(output, digits = 1, nsmall = 1))]
+  tmp[grepl('rate', variable), value_m := gsub(' ', '', format(round(output, 1), digits = 1, nsmall = 1))]
   tmp[grepl('rate', variable), value_m := ifelse(as.numeric(value_m) > 0, paste0('+', gsub(' ', '', value_m), '%'),
                                                  paste0(value_m, '%'))]
 
@@ -114,6 +114,14 @@ process_summary_number_rate_change_with_ci_table <- function(tab.incid)
 
   # process the number table
   tab.incid.num <- as.data.table(reshape2::dcast(tab.incid, variable+rep.nb+race.eth~year, value.var = 'value' ))
+
+  # tab.incid.num[`2000` != 0, change.rate1 := ((`2019` - `2000`)/`2000` * 100)]
+  # tab.incid.num[`2000` != 0, change.rate2 := ((`2021` - `2000`)/`2000` * 100)]
+  # tab.incid.num[`2019` != 0, change.rate3 := ((`2021` - `2019`)/`2019` * 100)]
+  # tab.incid.num[`2000` == 0, change.rate1 := '-']
+  # tab.incid.num[`2000` == 0, change.rate2 := '-']
+  # tab.incid.num[`2019` == 0, change.rate3 := '-']
+
   tab.incid.num[`2000` != 0, change.rate1 := as.character((`2019` - `2000`)/`2000` * 100)]
   tab.incid.num[`2000` != 0, change.rate2 := as.character((`2021` - `2000`)/`2000` * 100)]
   tab.incid.num[`2019` != 0, change.rate3 := as.character((`2021` - `2019`)/`2019` * 100)]
@@ -126,9 +134,9 @@ process_summary_number_rate_change_with_ci_table <- function(tab.incid)
   # table for rates
   tab.incid.rate <- as.data.table(reshape2::dcast(tab.incid, variable+rep.nb+race.eth~year, value.var = 'rate' ))
 
-  tab.incid.rate[`2000` != 0, change.rate1 := as.character((`2019` - `2000`)/`2000` * 100)]
-  tab.incid.rate[`2000` != 0, change.rate2 := as.character((`2021` - `2000`)/`2000` * 100)]
-  tab.incid.rate[`2019` != 0, change.rate3 := as.character((`2021` - `2019`)/`2019` * 100)]
+  tab.incid.rate[`2000` != 0, change.rate1 := as.character(((`2019` - `2000`)/`2000` * 100))]
+  tab.incid.rate[`2000` != 0, change.rate2 := as.character(((`2021` - `2000`)/`2000` * 100))]
+  tab.incid.rate[`2019` != 0, change.rate3 := as.character(((`2021` - `2019`)/`2019` * 100))]
   tab.incid.rate[`2000` == 0, change.rate1 := '-']
   tab.incid.rate[`2000` == 0, change.rate2 := '-']
   tab.incid.rate[`2019` == 0, change.rate3 := '-']
@@ -247,14 +255,14 @@ process_summary_number_ratio_rate_change_with_ci_table <- function(tab.incid)
 
   # table for rate ratio
   tab.incid.ratio <- as.data.table(reshape2::dcast(tab.incid, year+rep.nb~variable, value.var = 'rate' ))
-  tab.incid.ratio[, `Ages 5-9 years` := round(`Ages 5-9 years`/`Ages 0-4 years`, 2)]
-  tab.incid.ratio[, `Ages 10-17 years` := round(`Ages 10-17 years`/`Ages 0-4 years`, 2)]
-  tab.incid.ratio[, `Ages 0-4 years` := round(`Ages 0-4 years`/`Ages 0-4 years`, 2)]
+  tab.incid.ratio[, `Ages 5-9 years` := (`Ages 5-9 years`/`Ages 0-4 years`)]
+  tab.incid.ratio[, `Ages 10-17 years` := (`Ages 10-17 years`/`Ages 0-4 years`)]
+  tab.incid.ratio[, `Ages 0-4 years` := (`Ages 0-4 years`/`Ages 0-4 years`)]
   set(tab.incid.ratio, NULL, 'Ages 0-17 years', NULL)
   tab.incid.ratio <- as.data.table(reshape2::melt(tab.incid.ratio, id = c('year', 'rep.nb') ))
   tmp <- tab.incid.ratio[,
              list(
-               output = quantile(as.numeric(value), p = pds.quantiles, na.rm = TRUE),
+               output = quantile(round(as.numeric(value), 2), p = pds.quantiles, na.rm = TRUE),
                stat = pds.quantilelabels),
              by = c('year', 'variable')
   ]
@@ -302,8 +310,8 @@ process_summary_number_ratio_rate_change_with_ci_table_sex <- function(tab.incid
 
   # table for rate ratio
   tab.incid.ratio <- as.data.table(reshape2::dcast(tab.incid, year+rep.nb~variable, value.var = 'rate' ))
-  tab.incid.ratio[, `father` := round(`father`/`mother`, 2)]
-  tab.incid.ratio[, `mother` := round(`mother`/`mother`, 2)]
+  tab.incid.ratio[, `father` := (`father`/`mother`)]
+  tab.incid.ratio[, `mother` := (`mother`/`mother`)]
 
   set(tab.incid.ratio, NULL, 'orphans', NULL)
   tab.incid.ratio <- as.data.table(reshape2::melt(tab.incid.ratio, id = c('year', 'rep.nb') ))
@@ -313,7 +321,7 @@ process_summary_number_ratio_rate_change_with_ci_table_sex <- function(tab.incid
                            stat = pds.quantilelabels),
                          by = c('year', 'variable')
   ]
-  tmp[, value_m := gsub(' ', '', format(output, digits = 2, nsmall = 2))]
+  tmp[, value_m := gsub(' ', '', format(round(output, 2), digits = 2, nsmall = 2))]
 
   pds <- dcast.data.table(tmp, year+variable~stat, value.var = 'value_m')
 
@@ -353,12 +361,12 @@ process_summary_number_ratio_rate_race_change_with_ci_table <- function(tab.inci
 
   # table for rate ratio
   tab.incid.ratio <- as.data.table(reshape2::dcast(tab.incid, year+rep.nb~variable, value.var = 'rate' ))
-  tab.incid.ratio[, `Non-Hispanic American Indian or Alaska Native` := round(`Non-Hispanic American Indian or Alaska Native`/`Non-Hispanic Asian`, 2)]
-  tab.incid.ratio[, `Non-Hispanic Black` := round(`Non-Hispanic Black`/`Non-Hispanic Asian`, 2)]
-  tab.incid.ratio[, `Hispanic` := round(`Hispanic`/`Non-Hispanic Asian`, 2)]
+  tab.incid.ratio[, `Non-Hispanic American Indian or Alaska Native` := (`Non-Hispanic American Indian or Alaska Native`/`Non-Hispanic Asian`)]
+  tab.incid.ratio[, `Non-Hispanic Black` := (`Non-Hispanic Black`/`Non-Hispanic Asian`)]
+  tab.incid.ratio[, `Hispanic` := (`Hispanic`/`Non-Hispanic Asian`)]
   # tab.incid.ratio[, `Others` := round(`Others`/`Non-Hispanic Asian`, 2)]
-  tab.incid.ratio[, `Non-Hispanic White` := round(`Non-Hispanic White`/`Non-Hispanic Asian`, 2)]
-  tab.incid.ratio[, `Non-Hispanic Asian` := round(`Non-Hispanic Asian`/`Non-Hispanic Asian`, 2)]
+  tab.incid.ratio[, `Non-Hispanic White` := (`Non-Hispanic White`/`Non-Hispanic Asian`)]
+  tab.incid.ratio[, `Non-Hispanic Asian` := (`Non-Hispanic Asian`/`Non-Hispanic Asian`)]
 
   set(tab.incid.ratio, NULL, 'Total', NULL)
 
@@ -369,7 +377,7 @@ process_summary_number_ratio_rate_race_change_with_ci_table <- function(tab.inci
                            stat = pds.quantilelabels),
                          by = c('year', 'variable')
   ]
-  tmp[, value_m := gsub(' ', '', format(output, digits = 2, nsmall = 2))]
+  tmp[, value_m := gsub(' ', '', format(round(output, 2), digits = 2, nsmall = 2))]
 
   pds <- dcast.data.table(tmp, year+variable~stat, value.var = 'value_m')
 
@@ -622,7 +630,7 @@ process_pry_contrib_orphans_state_table <- function(dt.inc.m, dt.prev.m)
 
   # compute contribution
   dt[, contrib := value/value.t * 100]
-  dt[, contrib := gsub(' ', '', format(contrib, digits = 1, nsmall = 1))]
+  dt[, contrib := gsub(' ', '', format(round(contrib, 1), digits = 1, nsmall = 1))]
 
   dt[, contrib := as.character(contrib)]
   dt[, contrib := paste0(contrib, '%')]
@@ -634,7 +642,7 @@ process_pry_contrib_orphans_state_table <- function(dt.inc.m, dt.prev.m)
   colnames(dt.out2)[3:4] <-  paste0('Contribution ', c(1, 2))
 
   dt.out <- merge(dt.out, dt.out2, by = c('state', 'variable'))
-  dt.out[, value.t := gsub(' ', '', format(value.t, big.mark = ","))]
+  dt.out[, value.t := gsub(' ', '', format(round(value.t), big.mark = ","))]
   dt.out[, value.t := as.character(value.t)]
 
   dt.out[, rate.t := round(rate.t, 2)]

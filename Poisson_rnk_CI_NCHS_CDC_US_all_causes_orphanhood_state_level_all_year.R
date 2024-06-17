@@ -10,7 +10,7 @@ require(tidyverse)
 
 # User defined args -----
 tmp <- Sys.info()
-if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
+if (grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 {
   option_list <- list(
     optparse::make_option(c("-v", "--verbose"), action = "store_true", default = FALSE,
@@ -44,6 +44,7 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 }
 args$v.name <- 'V0526'
 args$sample.type <- 'poisson_sampling_rnk_1e4'
+# args$sample.type <- 'poisson_sampling_rnk'
 
 rep.nb <- args$rep.nb
 set.seed(rep.nb)

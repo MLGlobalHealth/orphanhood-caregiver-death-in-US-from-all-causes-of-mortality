@@ -11,7 +11,8 @@ require(tidyverse)
 
 # User defined args -----
 tmp <- Sys.info()
-if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
+# if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
+if (grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 {
   option_list <- list(
     optparse::make_option(c("-v", "--verbose"), action = "store_true", default = FALSE,

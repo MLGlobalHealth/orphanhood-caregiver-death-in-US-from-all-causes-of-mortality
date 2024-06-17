@@ -4316,7 +4316,7 @@ plot_contribution_orphan_deaths_national_bars_vsplit_ci <- function(pl.tab, tmp,
   pd[, variable := ifelse(grepl('death', variable), "contribution to deaths",
                           paste0("contribution to children newly\nexperiencing ", contrib.name, ' death'))]
 
-  pd[, contrib := format(value, digits = 1, nsmall = 1)]
+  pd[, contrib := format(round(value, 1), digits = 1, nsmall = 1)]
   pd[, contrib := as.character(contrib)]
   pd[, contrib := paste0(contrib, '%')]
   # plot the death number on the other side
@@ -4410,6 +4410,7 @@ plot_contribution_orphan_deaths_national_bars_vsplit_ci <- function(pl.tab, tmp,
 
   return(p.contrib)
 }
+
 plot_orphans_contribution_orphan_deaths_national_map_old <- function(pl.tab, tmp, prj.dir, title.input,type.input)
 {
   tp.title <- "children's\ncaregiver loss"

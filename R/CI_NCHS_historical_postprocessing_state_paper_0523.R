@@ -147,7 +147,7 @@ get_quantiles_estimates_med_state <- function(prj.dir, do, type.input, raw.type,
   # update v240208: remove 'Other' race & ethnicity
   do.all.ci <- do.all.ci[race.eth != 'Others']
   do.all.ci[, race.eth := 'All']
-  do.all.ci[, state := 'National']
+  # do.all.ci[, state := 'National']
 
   # d.death <- unique(do.all.ci[, list(year,cause.name,state,race.eth,deaths,rep.nb)])
   # d.death <- d.death[, list(deaths = sum(deaths, na.rm = T)),
@@ -196,6 +196,59 @@ get_quantiles_estimates_med_state <- function(prj.dir, do, type.input, raw.type,
   }
 }
 
+get_quantiles_estimates_med_state_sex_adj <- function(prj.dir, do, type.input, raw.type, summary.type.input)
+{
+  do.all.ci <- do[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
+  set(do.all.ci, NULL, 'child.age', NULL)
+  do.all.ci[, child.age := as.character('all')]
+
+  # update v240208: remove 'Other' race & ethnicity
+  do.all.ci <- do.all.ci[race.eth != 'Others']
+  do.all.ci[, race.eth := 'All']
+  # TODO: check if we...
+  # do.all.ci[, state := 'National']
+
+  # only get the estimates for mother, father, double_orphans, grandmother and grandfather
+  do.all.ci <- do.all.ci[, list(year,cause.name,state,race.eth,
+                                child.age,mother,father,double_orphans,grandmother,grandfather,rep.nb)]
+  # tmp <- do.all.ci[, list(year,cause.name,state,race.eth,child.age,mother,father,double_orphans)]
+  tmp <- as.data.table(reshape2::melt(do.all.ci, id = c('year', 'cause.name', 'state', 'race.eth', 'child.age', 'rep.nb')))
+  tmp <- tmp[, list(value = sum(value, na.rm = T)),
+             by = c('year', 'cause.name', 'state', 'race.eth', 'child.age', 'rep.nb', 'variable')]
+  tmp <- tmp[,
+             list(
+               output = quantile(value, p = .5, na.rm = TRUE),
+               stat = 'M'),
+             by = c('year','cause.name','state','race.eth','child.age', 'variable')
+  ]
+
+  tmp[, output := round(output)]
+
+  # d.death <- d.death[,
+  #                    list(
+  #                      deaths = quantile(deaths,.5, na.rm = TRUE),
+  #                      stat = 'M'),
+  #                    by = c('year','cause.name','state','race.eth')
+  # ]
+  # d.death[, deaths := round(deaths)]
+
+  # separate the quantiles
+  for (stat.input in c('M'))
+  {
+    tmp.m <- tmp[stat == stat.input]
+    # d.death.m <- d.death[stat == stat.input]
+    set(tmp.m, NULL, 'stat', NULL)
+    tmp.m <- as.data.table(reshape2::dcast(tmp.m, year+cause.name+state+race.eth+child.age~variable, value.var = 'output'))
+    tmp.m[, stat := stat.input]
+    # tmp.m <- merge(tmp.m, d.death.m, by = c('year', 'cause.name', 'state', 'race.eth', 'stat'), all = T)
+    tmp.m[, orphans := mother + father - double_orphans]
+    tmp.m[, grandp.loss := grandmother + grandfather]
+    tmp.m[, cg.loss := orphans + grandp.loss]
+
+    # state level aggregated to national level
+    write.csv(tmp.m, file.path(prj.dir, 'results', summary.type.input, paste0('hist_sex_adj_state_poisson_sampling_rnk_M_summary_cg_loss.csv')), row.names = F)
+  }
+}
 get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, v.name)
 {
   sel.nb <- 'all'
@@ -268,9 +321,22 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
   multi[, adj.factor := value/race.aggreg.loss]
   write.csv(multi, file.path(prj.dir, 'results', summary.type.input, paste0('state_adjust_race_sex_factor.csv')), row.names = F)
 
+  do.state.raw <- merge(do.state.raw[variable != 'deaths'], multi[, list(year,variable,cause.name,adj.factor)], by = c('year', 'variable', 'cause.name'), all.x = T)
+  # change back to 0 to viz
+  do.state.raw[is.na(adj.factor), adj.factor := 0]
+  do.state.raw[, value.up := round(value/adj.factor)]
+  do.state.raw[value == 0 & is.na(value.up), value.up := 0]
+
+  do.state <- as.data.table(reshape2:: dcast(do.state.raw, year+cause.name+child.age+state+race.eth~variable, value.var = 'value.up'))
+  # do.state[!is.na(double_orphans)]
+  # do.state <- merge(do.state, d.death, by = c('year', 'cause.name', 'state', 'race.eth'), all = T)
+
+  write.csv(do.state, file.path(prj.dir, 'results', summary.type.input, paste0('hist_state_adj_sex_', race.type,'M_summary_cg_loss_age.csv')), row.names = F)
+
   if (0)
   {
-    if (0)
+    # EDF 6C
+    if (1)
     {
       multi.pl <- copy(multi)
       multi.pl[, re.name := ifelse(cause.name == 'Drug poisonings', 'Drug overdose',
@@ -282,7 +348,7 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
       unique(multi.pl$cause.name)
       tmp.pl <- multi.pl[variable %in% c('mother', 'father'),
                          list('State' = sum(value, na.rm = T),
-                              'Standardized race & ethnicity' = sum(race.aggreg.loss, na.rm = T)),
+                              'National' = sum(race.aggreg.loss, na.rm = T)),
                          by = c('year', 'cause.name', 're.name', 'variable')]
       tmp.pl[, re.name := as.character(re.name)]
       setnames(tmp.pl, 'variable', 'sex')
@@ -319,10 +385,10 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
         scale_shape_manual(values = c(17, 16, 14)) +
 
         xlab('') +
-        ylab('Incidence of orphanhood aggregated to the total U.S.') +
-        labs(col = 'Stratifications',
-             shape = 'Stratifications',
-             size = 'Stratifications') +
+        ylab('State/age/sex/cause-of-death-specific incident orphanhood aggregated to national level') +
+        labs(col = 'Orphanhood estimate stratification',
+             shape = 'Orphanhood estimate stratification',
+             size = 'Orphanhood estimate stratification') +
         guides(size = 'none',
                col = guide_legend(override.aes = list(size = 4))) +
         scale_y_continuous(limits = function(x){c(0, (max(x) * 1.1))},
@@ -334,7 +400,7 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
               axis.title = element_text(size = 16),
               axis.text = element_text(size=13, family='sans'),
               text=element_text(size=16,family='sans'),
-              legend.title=element_text(size=15, family='sans'),
+              legend.title=element_text(size=15, face = 'bold', family='sans'),
               legend.text=element_text(size=13, family='sans'),
               legend.key.size = unit(16, 'pt'),
               strip.text = element_text(size = 16),
@@ -344,10 +410,12 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
               strip.background = element_blank()
         )
       p
-      ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_race_orphans_comp.png'), p, w = 21, h = 15, dpi = 310, limitsize = FALSE)
-      ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_race_orphans_comp.pdf'), p, w = 21, h = 15, dpi = 310, limitsize = FALSE)
+      ggsave(file = file.path(prj.dir, 'results', summary.type.input, 'edf6c_state_race_orphans_comp.png'), p, w = 21, h = 15, dpi = 310, limitsize = FALSE)
+      ggsave(file = file.path(prj.dir, 'results', summary.type.input, 'edf6c_state_race_orphans_comp.pdf'), p, w = 21, h = 15, dpi = 310, limitsize = FALSE)
 
 
+      if (0)
+      {
       p <- ggplot(multi.pl, aes(x = year, y = adj.factor, col = variable)) +
         geom_line() +
         theme_bw() +
@@ -381,6 +449,7 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
       ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.png'), p,  w = 18, h = 13)
       ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.pdf'), p,  w = 18, h = 13)
 
+      }
     }
   }
   if (0)
@@ -512,12 +581,12 @@ if (
 }
 
 # Scaling the incidence to the magnitude of national level ----
-if (
-  !file.exists(
-    file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
-  )
-)
-{
+# if (
+#   !file.exists(
+#     file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
+#   )
+# )
+# {
   cat('Processing for the multiplier factors to adj state level incidence')
   # 0910
   # get the quantitles for orphanhoods
@@ -532,13 +601,14 @@ if (
     file.path(args$out.dir, paste0('hist_',state.type, 'M_summary_cg_loss_age.csv'))
   ))
   {
+    # state level
     get_quantiles_estimates_med_state(args$prj.dir, do.all, type.input.state, raw.type = state.type, summary.type.input)
   }
 
   cat('Process the multipliers...\n')
-  if (!file.exists(
-    file.path(args$out.dir, paste0('state_adjust_race_sex_factor.csv'))
-    ))
+  # if (!file.exists(
+  #   file.path(args$out.dir, paste0('state_adjust_race_sex_factor.csv'))
+  #   ))
   {
     # TODO: more thoughts for scaling...
     # I used the same multipliers for CU, CL as that computed in M, for incidence estimates
@@ -547,7 +617,7 @@ if (
 
     # Alternatively, only use the incidence CU, CL to get the prevalence as a comparison of the UI...
 
-    # first get the multipliers from M
+    # first get the multipliers from M at the national level
     get_estimates_historical_state_multi_factor_sex(args$prj.dir, race.type, v.name)
   }
 
@@ -591,9 +661,10 @@ if (
     file.name <- file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
     save(do.all.adj, do.preval.all, file = file.name)
   }
-}else{
-  load(file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData')))
-}
+# }else{
+#   load(file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData')))
+#   get_quantiles_estimates_med_state_sex_adj(args$prj.dir, do.all.adj, type.input.state, raw.type = state.type, summary.type.input)
+# }
 
 # Figures and Tables for paper ----
 if (1)
@@ -653,11 +724,15 @@ if (1)
 
   dt <- generate_edf7(do.inc.total[stat == 'M'], do.prev.total[stat == 'M'], args$out.dir)
   cat('Done for EDF 7 ...\n')
+  cat('Saving data for EDF 7 to file ...\n')
+  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_edf7.RData')))
 
   # Table S13 ----
   # to support EDF 7
+  # load(file = file.path(args$out.dir, paste0('data_tab13.RData')))
   generate_table_S13(do.inc.total, do.prev.total, args$out.dir)
   cat('Done for Supp Table13 ...\n')
+  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_tab13.RData')))
 
   # Table S4, S5 ----
   # for all types of caregiver loss
@@ -715,7 +790,34 @@ if (1)
   do.inc.total <- merge(do.inc.total, c.pop.state, by = c('state', 'year'), all.x = T)
   do.prev.total <- merge(do.prev.total, c.pop.state, by = c('state', 'year'), all.x = T)
 
+  # load(file = file.path(args$out.dir, paste0('data_S4s5.RData')))
+
   generate_table_S4(do.inc.total, args$out.dir)
+  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_S4s5.RData')))
+
   generate_table_S5(do.prev.total, args$out.dir)
-}
+
+  # check the total
+  # args$out.dir <- '/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/results/summary_output_main_V0523'
+
+  load(file = file.path(args$out.dir, paste0('data_S4s5.RData')))
+  do.inc.total <- do.inc.total[state != 'AAUS']
+  tmp <- do.inc.total[, list(value = sum(value, na.rm = T)), by = c('year', 'variable', 'stat', 'loss.type')]
+  pop <- do.inc.total[, list(population = sum(population, na.rm = T)), by = c('year', 'variable', 'stat', 'loss.type')]
+  tmp <- merge(tmp, pop, by = c('year', 'variable', 'stat', 'loss.type'), all = T)
+
+  tmp[, state := 'AAUS']
+  tmp[, race.eth := 'All']
+  do.inc.total <- rbind(do.inc.total, tmp)
+
+  do.prev.total <- do.prev.total[state != 'AAUS']
+  tmp <- do.prev.total[, list(value = sum(value, na.rm = T)), by = c('year', 'loss.type', 'stat', 'race.eth')]
+  pop <- do.prev.total[, list(population = sum(population, na.rm = T)), by = c('year', 'race.eth', 'stat', 'loss.type')]
+  tmp <- merge(tmp, pop, by = c('year', 'race.eth', 'stat', 'loss.type'), all = T)
+
+  tmp[, state := 'AAUS']
+  tmp[, race.eth := 'All']
+  do.prev.total <- rbind(do.prev.total, tmp)
+
+  }
 cat('Done!\n')
