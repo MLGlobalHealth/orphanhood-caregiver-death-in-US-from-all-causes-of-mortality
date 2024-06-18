@@ -12,14 +12,14 @@
 - [Quick Start](#quick-start)
   - [System Requirements](#system-requirements)
   - [Installation](#installation)
-  - [Reproducing our Analyses](#reproducing-our-analyses)
-  - [Data source](#data-source)
-    - [Preprocessing steps](#preprocessing-steps)
-      - [Mortality data](#mortality-data)
-      - [Natality data](#natality-data)
-      - [Population size](#population-data)
-    - [Main analyses](#main-analyses)
-    - [Sensitivity Analyses](#sensitivity-analyses)
+- [Reproducing our Analyses](#reproducing-our-analyses)
+  - [Preprocessing steps](#preprocessing-steps)
+    - [Mortality data](#mortality-data)
+    - [Natality data](#natality-data)
+    - [Population size](#population-size)
+    - [Household data](#houehold-size)
+  - [Main analyses](#main-analyses)
+  - [Sensitivity Analyses](#sensitivity-analyses)
       
       
 ## License
@@ -54,12 +54,12 @@ If not activated, activate the environment for use:
 source activate all_causes_deaths
 ```
 
-### Reproducing our Analyses
+## Reproducing our Analyses
 All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All raw data for this paper were stored in [Zenodo]. Link to Zenodo will be updated soon.
 
 
-#### Preprocessing steps
-##### Mortality data
+### Preprocessing steps
+#### Mortality data
 We pulled and preprocessed line-list mortality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific mortality data were extracted from [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). 
 
 The raw data can be requested from [Mortality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data) and [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). Mortality data extracted from CDC WONDER are provided in `/data/CDC/ICD-10_113_Cause`
@@ -86,7 +86,7 @@ To add Poisson noise on the morality data and obtain the sorted sampled data, we
 4. For state by race & ethnicity level analysis using CDC WONDER data exclusively: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_mort_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_CDC_mort_state_race_data.R` to rank the sampled mortality data at the state by race & ethnicity level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
 
 
-##### Natality data
+#### Natality data
 We pulled and preprocessed line-list natality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific natality data were extrated from [CDC WONDER](https://wonder.cdc.gov/natality.html).
 
 The line-list natality  data can be requested from [Natality Birth Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data) and group-level data can be requested from [CDC WONDER interactive page](https://wonder.cdc.gov/natality.html). Mortality data extracted from CDC WONDER are provided in `/data/birth`.
@@ -109,7 +109,7 @@ To add Poisson noise on the natality data and obtain the sorted sampled data, we
 
 3. For state by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_cdc_birth_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_birth_state_race_data.R` to rank the sampled NCHS and CDC WODNER natality data respectively at the state by race & ethnicity level and save the data in order into folder.
 
-##### Population size
+#### Population size
 We pulled historical population size data from [Surveillance Epidemiology and End Results Program (SEER) interactive databases](https://seer.cancer.gov/popdata/singleages.html). The population data are provided in `/data/NCHS/fertility/pop_1968.rds`. Additionally, we extracted population size data from [CDC WONDER interactive page](https://wonder.cdc.gov/bridged-race-population.html) from 1990. Data in `/data/data/pop/raw` contains adult population and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. Data in `/data/data/pop/raw_new` and `/data/data/pop/raw_child_new` contains adult population and children counts, respectively, from 1990 at state level stratified by bridged-race and ethnicity. 
 
 To add Poisson noise on the population data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked population data with Poisson noise following steps. Note that we combined population data from two data sources and mainly use the population data from CDC WONDER after 1990.
@@ -118,14 +118,14 @@ To add Poisson noise on the population data and obtain the sorted sampled data, 
 
 2. For state by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_pop_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_pop_state_race_data.R` to rank the sampled population data at the state level by race & ethnicity and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
 
-##### Grandparents (houehold) data
-We extracted the number of grandparents in the same household as caregivers from United States Census Bureau, i.e. data in 2019: [2019: ACS 5-Year Estimates Subject Tables](https://data.census.gov/table/ACSST5Y2019.S1002). The estimated household data with margin of errors were provided. We pulled the corresponding information at the national level by race & ethnicity; state level and state level by race & ethnicity in folder `data/grandparents/raw_ci`.
+#### Household data
+We extracted the yearly number of grandparent caregivers from United States Census Bureau data source dashboard. For example, data in 2019 can be accessed from [2019: ACS 5-Year Estimates Subject Tables](https://data.census.gov/table/ACSST5Y2019.S1002). The estimated household data with margin of errors are also provided. We pulled the corresponding information at the national level by race & ethnicity; state level and state level by race & ethnicity in folder `data/grandparents/raw_ci`.
 
 To sample the household data from the online dashboard based on providing marginal of errors, we suggested to use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resampled_grandp_data` as 1. The job will automatically run script `/R/ACS_grandp_data_ci_save.R` to resample data based on the estimated mean and marginal of errors. The sample size should be pre-defined in the script `/ACS_grandp_data_ci_save.R`.
 
 Other data sources were provided in the supplementary materials. 
 
-#### Main analyses
+### Main analyses
 Our main analyses depend on resampled ranked data sets with Poisson noise on mortality data, natality data and population data.
 The comparability ratios used on cause-of-death counts before 1999 and the grandparents data from the household dataset are resmpaled from the uncertainty ranges from the provided data.
 
@@ -151,7 +151,7 @@ To process the analysis, set `args$uncertainty_state_level_rep_resample_poisson_
 To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson_rnk = 1`.
 
 
-#### Sensitivity Analyses
+### Sensitivity Analyses
 
 1. Sensitivity in mortality data and live births data
 
