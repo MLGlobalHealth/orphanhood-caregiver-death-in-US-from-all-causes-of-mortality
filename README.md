@@ -12,14 +12,14 @@
 - [Quick Start](#quick-start)
   - [System Requirements](#system-requirements)
   - [Installation](#installation)
-  - [Reproducing our Analyses](#reproducing-our-analyses)
-  - [Data source](#data-source)
-    - [Preprocessing steps](#preprocessing-steps)
-      - [Mortality data](#mortality-data)
-      - [Natality data](#natality-data)
-      - [Population size](#population-data)
-    - [Main analyses](#main-analyses)
-    - [Sensitivity Analyses](#sensitivity-analyses)
+- [Reproducing our Analyses](#reproducing-our-analyses)
+  - [Preprocessing steps](#preprocessing-steps)
+    - [Mortality data](#mortality-data)
+    - [Natality data](#natality-data)
+    - [Population size](#population-size)
+    - [Household data](#houehold-size)
+  - [Main analyses](#main-analyses)
+  - [Sensitivity Analyses](#sensitivity-analyses)
       
       
 ## License
@@ -54,23 +54,12 @@ If not activated, activate the environment for use:
 source activate all_causes_deaths
 ```
 
-### Reproducing our Analyses
-All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. 
-
-### Data source
-| Data        | Timing | Demographics       | Link  | Notes|
-| ------------- |:-------------: |:-------------:|:-------------:| -----:|
-| Mortality data | Yearly data from 1983 to 2021 | 1-year age bands; Sex; Race; Ethnicity; ICD-9 code (1983-1998) or ICD-10 code (1999-2021); State|[National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm)| Geographic information (U.S. state) is available until 2005; Instruction to auto-download the datasets |
-| Mortality data * | Yearly data from 1999 to 2021 | 5-year age bands; Sex; Race; Ethnicity; ICD-10 code; State|[CDC WONDER](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm)| Counts < 10 are suppressed |
-| ------------- |:-------------: |:-------------:|:-------------:| -----:|
-
-#### Data downloading instruction
+## Reproducing our Analyses
+All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All raw data for this paper were stored in [Zenodo]. Link to Zenodo will be updated soon.
 
 
-
-
-#### Preprocessing steps
-##### Mortality data
+### Preprocessing steps
+#### Mortality data
 We pulled and preprocessed line-list mortality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific mortality data were extracted from [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). 
 
 The raw data can be requested from [Mortality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data) and [CDC WONDER interactive page](https://wonder.cdc.gov/Deaths-by-Underlying-Cause.html). Mortality data extracted from CDC WONDER are provided in `/data/CDC/ICD-10_113_Cause`
@@ -82,72 +71,100 @@ To preprocess the mortality data from the line-list NCHS dataset online, we sugg
 2. run script `/scripts_death/get_all_nchs_deaths_1983-2021.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
 Then mortality data were obtained at the group level in each year in `/data/NCHS/death/output/`. 
 
-To obtain the uncertainty of the estimates, we suggested users to use job submittion script to sample mortality data with Poisson noise. In this step,  please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resample_mort_data_poisson_with_comp_ratio` as 1. The job will automatically run script `/scripts_death/NCHS_mortality_resampling_poisson_with_comp_ratio.R` to resample death counts including the Poisson noise, while harmonising the cause-specific mortality data coded in ICD-9 before 1999 to the ICD-10 related classification. Users can pre-define the number of resampled mortality data sets in the `start.me.hpc.R` with the variable `args$sample.nb`.
+To add Poisson noise on the morality data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked mortality data with Poisson noise following steps:
 
-##### Natality data
+1. Please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resample_mort_data_poisson_with_comp_ratio` as 1. The job will automatically run script `/scripts_death/NCHS_mortality_resampling_poisson_with_comp_ratio.R` to resample death counts including the Poisson noise, while harmonising the cause-specific mortality data coded in ICD-9 before 1999 to the ICD-10 related classification. Users can pre-define the number of resampled mortality data sets in the `start.me.hpc.R` with the variable `args$sample.nb`. The mortality data with Poisson noise are stored in path  `data/NCHS/rep_mortality_poisson`.
+
+2. For national by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_mort_national_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_mort_national_data.R` to rank the sampled mortality data at the national level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+3. For state level analysis, we used NCHS data and CDC WONDER data:
+
+    a. NCHS data: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_mort_state_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_mort_state_data.R` to rank the sampled mortality data at the state level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+    b. CDC WONDER data: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_mort_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_CDC_mort_state_data.R` to rank the sampled mortality data at the state level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+4. For state by race & ethnicity level analysis using CDC WONDER data exclusively: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_mort_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_CDC_mort_state_race_data.R` to rank the sampled mortality data at the state by race & ethnicity level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+
+#### Natality data
 We pulled and preprocessed line-list natality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific natality data were extrated from [CDC WONDER](https://wonder.cdc.gov/natality.html).
 
 The line-list natality  data can be requested from [Natality Birth Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data) and group-level data can be requested from [CDC WONDER interactive page](https://wonder.cdc.gov/natality.html). Mortality data extracted from CDC WONDER are provided in `/data/birth`.
 We also cleaned line-list natality data and provided the dataset at the group level in `data/NCHS/births/output/births_1968-2021.RDS`. The raw data can be requested from [Natality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data).
 
-If users want to preprocess the mortality data from the line-list dataset online, we suggested the following steps:
+If users want to preprocess the natality data from the line-list dataset online, we suggested the following steps:
 
 1. run script `/scripts_births/get_births_nchs.R` to auto-download natality dataset for each year from 1968. 
 2. run script `/scripts_births/process_births_all_years.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
 
-##### Population size
-We pulled historical population size data from [Surveillance Epidemiology and End Results Program (SEER) interactive databases](https://seer.cancer.gov/popdata/singleages.html). The population data are provided in `/data/NCHS/fertility/pop_1968.rds`. Additionally, we extracted population size data from [CDC WONDER interactive page](https://wonder.cdc.gov/bridged-race-population.html) from 1990. Data in `/data/data/pop/raw` contains adult population counts and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. 
+To add Poisson noise on the natality data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked natality data with Poisson noise following steps:
+
+1. For national by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_birth_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_birth_data.R` to rank the sampled natality data at the national level and save the data in order into folder.
+
+2. For state level analysis, we used NCHS data and CDC WONDER data:
+
+    a. NCHS data: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_birth_data` as 1 if you have not submiited the corresponding job for the national by race & ethncity level analysis. The job will automatically run script `/scripts_ranking/ranking_sampled_birth_data.R` to rank the sampled natality data at the state level and save the data in order into folder.
+
+    b. CDC WONDER data: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_birth_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_CDC_birth_state_data.R` to rank the sampled natality data at the state level and save the data in order into folder.
+
+3. For state by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_cdc_birth_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_birth_state_race_data.R` to rank the sampled NCHS and CDC WODNER natality data respectively at the state by race & ethnicity level and save the data in order into folder.
+
+#### Population size
+We pulled historical population size data from [Surveillance Epidemiology and End Results Program (SEER) interactive databases](https://seer.cancer.gov/popdata/singleages.html). The population data are provided in `/data/NCHS/fertility/pop_1968.rds`. Additionally, we extracted population size data from [CDC WONDER interactive page](https://wonder.cdc.gov/bridged-race-population.html) from 1990. Data in `/data/data/pop/raw` contains adult population and children counts from 1990 at national level stratified by bridged-race and ethnicity and at the state level. Data in `/data/data/pop/raw_new` and `/data/data/pop/raw_child_new` contains adult population and children counts, respectively, from 1990 at state level stratified by bridged-race and ethnicity. 
+
+To add Poisson noise on the population data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked population data with Poisson noise following steps. Note that we combined population data from two data sources and mainly use the population data from CDC WONDER after 1990.
+
+1. For national by race & ethnicity level and state level analyses: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_nchs_cdc_pop_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_pop_data.R` to rank the sampled population data at the national level and the state level, separately. Then job will save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+2. For state by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_pop_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_pop_state_race_data.R` to rank the sampled population data at the state level by race & ethnicity and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
+
+#### Household data
+We extracted the yearly number of grandparent caregivers from United States Census Bureau data source dashboard. For example, data in 2019 can be accessed from [2019: ACS 5-Year Estimates Subject Tables](https://data.census.gov/table/ACSST5Y2019.S1002). The estimated household data with margin of errors are also provided. We pulled the corresponding information at the national level by race & ethnicity; state level and state level by race & ethnicity in folder `data/grandparents/raw_ci`.
+
+To sample the household data from the online dashboard based on providing marginal of errors, we suggested to use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resampled_grandp_data` as 1. The job will automatically run script `/R/ACS_grandp_data_ci_save.R` to resample data based on the estimated mean and marginal of errors. The sample size should be pre-defined in the script `/ACS_grandp_data_ci_save.R`.
 
 Other data sources were provided in the supplementary materials. 
 
-##### Main analyses
-Our main analyses depend on resampled data sets with Poisson noise on mortality data, natality data and population data.
-The comparability ratios used on cause-of-death counts before 1999 and the grandparents data from the household dataset are resmpaled
-from the uncertainty ranges from the provided data.
+### Main analyses
+Our main analyses depend on resampled ranked data sets with Poisson noise on mortality data, natality data and population data.
+The comparability ratios used on cause-of-death counts before 1999 and the grandparents data from the household dataset are resmpaled from the uncertainty ranges from the provided data.
 
 Our run is processed in HPC and the jobs are submitted through script `start.me.hpc.R`. Then run the R script 
 ```r
 Rscript start.me.hpc.R
 ```
 
-1. Resampling mortality data
+1. Setting the sample size for uncertainty computation
 
-To process the bootstrap resampled mortality data, in the input arguments block, set `resample_mort_data_poisson_with_comp_ratio = 1` in HPC submission job script. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. 
+Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. This number should be consistent with the sample size for the mortality data and grandparents data.
 
-2. Resampling caregiver counts in household data
+2. Orphanhood and all caregiver loss estimation at the national level by race & ethnicity
 
-To process the bootstrap resampled grandparent data in the houehold, set `args$resampled_grandp_data = 1` in the input arguments block in HPC submission job script. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. 
+To process the analysis, set `args$uncertainty_race_eth_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_national_race_poisson_rnk = 1`. 
 
-3. Orphanhood and all caregiver loss estimation at the national level by standardlized race & ethnicity
+3. Orphanhood and all caregiver loss estimation at the state level
 
-To process the analysis, set `args$uncertainty_race_eth_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_national_race_poisson = 1` in HPC. 
+To process the analysis, set `args$uncertainty_state_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_poisson_rnk = 1`.
 
-4. Orphanhood and all caregiver loss estimation at the state level
+4. Orphanhood and all caregiver loss estimation at the state level by race and ethnicity
 
-To process the analysis, set `args$uncertainty_state_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_poisson = 1` in HPC. 
-
-5. Orphanhood and all caregiver loss estimation at the state level by race and ethnicity
-
-To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poisson = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson = 1` in HPC. 
+To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson_rnk = 1`.
 
 
-##### Sensitivity Analyses
+### Sensitivity Analyses
+
 1. Sensitivity in mortality data and live births data
 
-To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp.R`.
+To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp_0520.R`.
 
 2. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
 
-To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sensitivity_analysis.R`.
+To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sensitivity_analysis_0527.R`.
 
 3. Sensitivity in national-level orphanhood estimates to potentially correlated fertility rates
 
-To process the analysis, set `race_eth_level_rep_resample_poisson_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates.R`.
+To process the analysis, set `race_eth_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516.R`.
 
 4. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
 
-To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis.R`.
-
-5. Sensitivity in national-level caregiver loss estimates to assumption on historic number of grandparent caregivers
-
-To process the analysis and get the figure in the paper, please run script `/R/un_older_ppl.R`.
+To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis_0527.R`.

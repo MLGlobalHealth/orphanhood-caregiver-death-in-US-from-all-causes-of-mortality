@@ -23,7 +23,7 @@ args$in.dir <- file.path(args$prj.dir, 'data')
 source(file.path(args$prj.dir,"R","grandp_household_total.R"))
 
 # Bootstrap ----
-for (rep.nb in 1:1e3)
+for (rep.nb in (1:1e4))
 {
   set.seed(rep.nb)
   # national race.eth level also by state
@@ -34,11 +34,12 @@ for (rep.nb in 1:1e3)
 }
 
 cat('Done for sampling!\n')
-# get the 95% bootstrap intervals
+
+# get the 95% bootstrap intervals ----
 get_95_ci_grandp_state <- function(in.dir)
 {
   all.df.race <- list()
-  for (rep.nb in 1:1e3)
+  for (rep.nb in 1:1e4)
   {
     cat('The ', rep.nb, '-th sample...\n')
     rep.dir <- paste0('rep_grandp-', rep.nb)
@@ -84,7 +85,7 @@ get_95_ci_grandp_state <- function(in.dir)
 get_95_ci_grandp_national_race <- function(in.dir)
 {
   all.df.race <- list()
-  for (rep.nb in 1:1e3)
+  for (rep.nb in 1:1e4)
   {
     cat('The ', rep.nb, '-th sample...\n')
     rep.dir <- paste0('rep_grandp-', rep.nb)

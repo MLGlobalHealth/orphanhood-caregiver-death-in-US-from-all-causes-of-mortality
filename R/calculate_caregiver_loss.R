@@ -1,88 +1,3 @@
-# age of children by age of parents older than 30
-# age of children by age groups of grandp
-process_nb_orphans_table_state_national_all_year = function(in.dir, prj.dir, cur.yr, type.input, d.death, sel.nb, if.smooth, v.name, folder.name)
-{
-  d_deaths <- as.data.table(d.death)
-  states <- unique(d_deaths$state)
-  rcat <- unique(d_deaths$race.eth)
-  # exclude some groups we don't have complete data for
-  rcat <- rcat[!(grepl("More than" ,rcat) | grepl("Unknown",rcat))]
-
-  i <- 0
-  # ds <- vector('list', length(unique(states)) * length(unique(rcat)))
-  ds.age <- vector('list', length(unique(states)) * length(unique(rcat))) # storing the nb of cg loss considering double orphans
-
-  # dor <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
-  dor.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
-  sc.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
-
-  for (s in states)
-  {
-    for (r in rcat)
-    {
-      # process the orphans by age of adults ----
-      i <- i + 1
-      tmp <- d_deaths[state == s & race.eth == r]
-      # if due to suppression issue, the subset table contains no data, then we skip that
-      if (nrow(tmp) > 0)
-      {
-        group <- paste0("usa","_",gsub(' ','-',cur.yr),"_", gsub(' ','-',s),"_",gsub(' ','-',r))
-        cat('Processing orphans by age of parents in file: ', group, ' ...\n')
-        # out <- process_orphans_usa_state_national_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
-        # dor[[i]] <- out$d_age
-        #
-        cat('Processing orphans by age of children ...\n')
-        out.age <- process_orphans_with_age_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
-        dor.age[[i]] <- out.age$d_age
-
-        tp <- tmp[age %in% c("30-34", "35-39", "40-44", "45-49",
-                             "50-54", "55-59", "80-84", "60-64",
-                             "65-69", "70-74" ,"75-79",
-                             "85+")]
-        if (nrow(tp) > 0 )
-        {
-          # process the children lost grandparents ----
-          cat('Processing caregiver loss ...\n')
-          grandp <- process_grandp_loss_usa_single_state_national_all_year(tmp, in.dir, cur.yr, type.input, group,s,r)
-
-          cat('Processing caregiver loss by age of children based on the age dist of orphans ...\n')
-          grandp.age <- process_cg_with_age_of_orphans(grandp, out.age$d_age, in.dir, cur.yr, type.input, group, s, r)
-          sc.age[[i]] <- grandp.age
-
-          # adjust for the number of caregiver loss, considering the double loss
-          ds.age[[i]] <- compute_double_orphans_all_year_old(in.dir, prj.dir, group, out.age$d_age, grandp.age, v.name)
-          #
-          # # combine number of caregiver loss and orphans regardless of the age of children
-          # ds[[i]] <- combine_caregiver_loss(in.dir, prj.dir, group, out$d_summary, grandp)
-        }else{
-          # TODO: if we don't have the deaths data for people older than 30,
-          # we will present the orphans of parents 15-29 or just skip that state + race/eth?
-        }
-      }
-    }
-  }
-
-  # df <- data.table::rbindlist( ds, use.names = T, fill = T )
-  # tmp <- data.table::rbindlist( dor, use.names = T, fill = T )
-  tmp.age <- data.table::rbindlist( dor.age, use.names = T, fill = T )
-  sc.age.all <- data.table::rbindlist( sc.age, use.names = T, fill = T )
-
-  # # compute for tmp and df files based on the age-specific files
-  # tmp <- tmp.age[, list(orphans = sum(orphans, na.rm = T))]
-  #
-
-
-  # cat('Saving nb of orphans based on causes of deaths ...\n')
-  # write.csv(tmp, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('parents_deaths_orphans_summary_', cur.yr, '.csv')), row.names = F)
-  cat('Saving nb of orphans by age of children by state ...\n')
-  write.csv(tmp.age, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('parents_deaths_orphans_with_age_summary_', cur.yr, '.csv')), row.names = F)
-  cat('Saving nb of cg loss by age of children by causes ...\n')
-  write.csv(sc.age.all, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('grandparents_deaths_loss_with_age_summary_', cur.yr, '.csv')), row.names = F)
-  # cat('Saving nb of all types of orphans by causes ...\n')
-  # saveRDS(df, file = paste0(file.path(in.dir, 'data', 'orphans', paste0(paste0(type.input, '_', v.name), '_orphans_leading-', sel.nb, 'causes_')), cur.yr, '.RDS'))
-  # write.csv(df, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('orphans_leading-', sel.nb, 'causes_', cur.yr, '.csv')), row.names = F)
-}
-
 # update 0827, age of children losing grandparents
 # based on the prop of orphans losing parents older than 30 by cause
 process_nb_orphans_table_state_national_all_year_v2 = function(in.dir, prj.dir, cur.yr, type.input, resample.dir, rep.nb, d.death, deaths.pre, sel.nb, if.smooth, v.name, folder.name)
@@ -225,205 +140,6 @@ process_nb_orphans_table_state_national_all_year_save_double_orphans <- function
                      by = c('year', 'cause.name')]
   cat('Saving nb of orphans w.r.t all and double counting ...\n')
   write.csv(tmp.age, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('orphans_all_double_counting_', cur.yr, '.csv')), row.names = F)
-}
-compute_double_orphans_all_causes_all_year_save <- function(in.dir, prj.dir, type.input, country, data, d.deaths.pre, v.name)
-{
-  # data <- as.data.table(read.csv(file.path(prj.dir, paste0('results/orphans/parents_deaths_orphans_summary_',country,'.csv'))))
-  data$gender <- tolower(data$gender)
-  # process the pop data won't combine for the older people
-  if (grepl('race', type.input))
-  {
-    type.input <- 'national_race'
-  }
-  pop.all <- as.data.table(read.csv(file.path(in.dir, 'data', 'pop', paste0(type.input, '_', 'nchs-cdc_population_5yr_old_all.csv'))))
-  pop <- pop.all[year == unique(data$year)]
-
-  hazard <- data[, list(orphans.all = sum(orphans, na.rm = T)),
-                 by = c('age','year','sex','race.eth','state','cause.name','deaths')]
-  hazard <- hazard[, list(orphans.all = sum(orphans.all, na.rm = T),
-                          deaths.all = sum(deaths, na.rm = T)),
-                   by = c('age','year','sex','race.eth','state')]
-  hazard <- merge(hazard, pop[, list(age.cat, year,sex, population, race.eth, state)],
-                  by.x = c('age', 'year', 'sex', 'race.eth', 'state'),
-                  by.y = c('age.cat', 'year', 'sex', 'race.eth', 'state'), all.x = T)
-  hazard[!is.na(population), hazard := deaths.all/population * (1/5)]
-  hazard[is.na(population), hazard := 0]
-
-  # compute for the current year double orphans
-  data.double <- merge(data, hazard, by = c('age', 'sex', 'race.eth', 'state', 'year'), all = T)
-  data.double[, double.new := hazard * orphans]
-  # total nb of orphans
-  data.parents <- as.data.table(reshape2::dcast(data.double, age+race.eth+state+year+cause.name+child_age~sex, value.var = 'orphans'))
-  # double counted orphans in current year
-  data.double <- as.data.table(reshape2::dcast(data.double, age+race.eth+state+year+cause.name+child_age~sex, value.var = 'double.new'))
-  data.double[is.na(Female), Female := 0]
-  data.double[is.na(Male), Male := 0]
-  # symmery prop
-  data.double[, double_orphans := (Female + Male)/2]
-  setnames(data.double, c('Female', 'Male'), c('Mothers.cur', 'Fathers.cur'))
-
-  data.parents[is.na(Female), Female := 0]
-  data.parents[is.na(Male), Male := 0]
-  data.double <- merge(data.parents, data.double, by = c('age', 'race.eth', 'state', 'year', 'cause.name', 'child_age'), all = T)
-  # orphans = mother + father + double_orphans
-  summary(data.double$double_orphans)
-  setnames(data.double, c('Female', 'Male'), c('Mothers.total', 'Fathers.total'))
-
-  parents.orphans <- copy(data.double)
-  data.double <- copy(parents.orphans)
-
-  # compute for the past year double orphans
-  # only available from the second year
-  if (nrow(d.deaths.pre) > 0)
-  {
-    # load the past 17 years data for hazard computation
-    pop <- pop.all[year >= as.integer(unique(data$year)) - 17 & year < unique(data$year)]
-    # d.deaths.pre
-    hazard <- d.deaths.pre[, list(deaths.all = sum(deaths, na.rm = T)),
-                           by = c('age','year','sex','race.eth','state')]
-    hazard <- merge(hazard, pop[, list(age.cat, year,sex, population, race.eth, state)],
-                    by.x = c('age', 'year', 'sex', 'race.eth', 'state'),
-                    by.y = c('age.cat', 'year', 'sex', 'race.eth', 'state'), all.x = T)
-    hazard[!is.na(population), hazard := deaths.all/population * (1/5)]
-    hazard[is.na(population), hazard := 0]
-
-    # year diff
-    hazard[, yr.diff := unique(data$year) - year]
-    # assume the age is at the midpoint, and we will change the age bands every 5 years
-    hazard[, mid.age := unlist(lapply(strsplit(age, "-"),'[' ,1))]
-    hazard[grepl('\\+', age), mid.age := unlist(lapply(strsplit(age, "\\+"),'[' ,1))]
-    # mid age := mid.age + 2
-    # mid.age + yr.diff is the. mid age in current year
-    hazard[, mid.age := as.integer(mid.age) + 2 + yr.diff]
-
-    hazard[, age.cur := mid.age %/% 5]
-    hazard[, age.cur := paste0(age.cur * 5, '-' , (age.cur + 1) * 5 - 1)]
-    # cut at fathers' age 95
-    hazard <- hazard[mid.age < 95]
-    hazard[mid.age >= 85, age.cur := '85+']
-
-    # cumsum based on yr.diff and age of parents
-    # if the yr.diff is 2, then the orphans are of age 2, and need to sum yr.diff <= 2
-    pre.hazard <- list()
-    for (i in sort(unique(hazard$yr.diff)))
-    {
-      tmp <- hazard[yr.diff <= i]
-      tmp <- tmp[, list(hazard = sum(hazard, na.rm = T)),
-                 by = c('age.cur', 'sex', 'race.eth', 'state')]
-      tmp[, child_age := i]
-      pre.hazard[[i]] <- copy(tmp)
-    }
-    hazard <- data.table::rbindlist( pre.hazard, use.names = T, fill = T )
-
-    pre.double <- merge(data, hazard,
-                        by.x = c('age', 'sex', 'race.eth', 'state', 'child_age'),
-                        by.y = c('age.cur', 'sex', 'race.eth', 'state', 'child_age'),
-                        # allow.cartesian = T,
-                        all = T)
-
-    # remove the unmatched data (for 'Other' race cat. 0 counts)
-    pre.double <- pre.double[!is.na(cause.name)]
-    pre.double[is.na(hazard), hazard := 0]
-    pre.double[, double.pre := hazard * orphans]
-    summary(pre.double$double.pre)
-    pre.double[is.na(double.pre)]
-
-    pre.double <- as.data.table(reshape2::dcast(pre.double, age+race.eth+state+year+cause.name+child_age~sex, value.var = 'double.pre'))
-    pre.double[is.na(Female), Female := 0]
-    pre.double[is.na(Male), Male := 0]
-
-    data.double <- merge(parents.orphans, pre.double, by = c('age', 'race.eth', 'state', 'year', 'cause.name', 'child_age'), all = T)
-    setnames(data.double,
-             c('Female', 'Male'),
-             c('Mothers.pre', 'Fathers.pre')
-    )
-    data.double[, Mothers.double := Mothers.cur + Mothers.pre]
-    data.double[, Fathers.double := Fathers.cur + Fathers.pre]
-    set(data.double, NULL, c('Mothers.cur', 'Mothers.pre', 'Fathers.cur', 'Fathers.pre'), NULL)
-
-  }else{
-    data.double[, Mothers.double := Mothers.cur]
-    data.double[, Fathers.double := Fathers.cur]
-    set(data.double, NULL, c('Mothers.cur', 'Fathers.cur'), NULL)
-
-  }
-
-  data.double[, double := (Mothers.double + Fathers.double)]
-  data.double[, all := (Mothers.total + Fathers.total)]
-  data.double <- data.double[, list(age,state,race.eth,year,cause.name,child_age,
-                                    double,all)]
-  return(data.double)
-}
-# update 0705, age of children losing grandparents
-# based on the prop of orphans losing parents older than 30 by cause
-process_nb_orphans_table_state_national_all_year_v2_old = function(in.dir, prj.dir, cur.yr, type.input, d.death, sel.nb, if.smooth, v.name, folder.name)
-{
-  d_deaths <- as.data.table(d.death)
-  states <- unique(d_deaths$state)
-  rcat <- unique(d_deaths$race.eth)
-  # exclude some groups we don't have complete data for
-  rcat <- rcat[!(grepl("More than" ,rcat) | grepl("Unknown",rcat))]
-
-  i <- 0
-  ds.age <- vector('list', length(unique(states)) * length(unique(rcat))) # storing the nb of cg loss considering double orphans
-  dor.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
-  sc.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
-
-  for (s in states)
-  {
-    for (r in rcat)
-    {
-      # process the orphans by age of adults ----
-      i <- i + 1
-      tmp <- d_deaths[state == s & race.eth == r]
-      # if due to suppression issue, the subset table contains no data, then we skip that
-      if (nrow(tmp) > 0)
-      {
-        group <- paste0("usa","_",gsub(' ','-',cur.yr),"_", gsub(' ','-',s),"_",gsub(' ','-',r))
-        cat('Processing orphans by age of parents in file: ', group, ' ...\n')
-        # out <- process_orphans_usa_state_national_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
-        # dor[[i]] <- out$d_age
-        #
-        cat('Processing orphans by age of children ...\n')
-        out.age <- process_orphans_with_age_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
-        dor.age[[i]] <- out.age$d_age
-
-        tp <- tmp[age %in% c("30-34", "35-39", "40-44", "45-49",
-                             "50-54", "55-59", "80-84", "60-64",
-                             "65-69", "70-74" ,"75-79",
-                             "85+")]
-        if (nrow(tp) > 0 )
-        {
-          # process the children lost grandparents ----
-          cat('Processing caregiver loss ...\n')
-          grandp <- process_grandp_loss_usa_single_state_national_all_year(tmp, in.dir, cur.yr, type.input, group,s,r)
-
-          cat('Processing caregiver loss by age of children based on the age dist of orphans ...\n')
-          grandp.age <- process_cg_with_age_of_orphans_cause(grandp, out.age$d_age, in.dir, cur.yr, type.input, group, s, r)
-          sc.age[[i]] <- grandp.age
-
-          # adjust for the number of caregiver loss, considering the double loss
-          ds.age[[i]] <- compute_double_orphans_all_year_old(in.dir, prj.dir, group, out.age$d_age, grandp.age, v.name)
-          #
-          # # combine number of caregiver loss and orphans regardless of the age of children
-          # ds[[i]] <- combine_caregiver_loss(in.dir, prj.dir, group, out$d_summary, grandp)
-        }else{
-          # TODO: if we don't have the deaths data for people older than 30,
-          # we will present the orphans of parents 15-29 or just skip that state + race/eth?
-        }
-      }
-    }
-  }
-
-  # df <- data.table::rbindlist( ds, use.names = T, fill = T )
-  # tmp <- data.table::rbindlist( dor, use.names = T, fill = T )
-  tmp.age <- data.table::rbindlist( dor.age, use.names = T, fill = T )
-  sc.age.all <- data.table::rbindlist( sc.age, use.names = T, fill = T )
-
-  cat('Saving nb of orphans by age of children by state ...\n')
-  write.csv(tmp.age, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('parents_deaths_orphans_with_age_summary_', cur.yr, '.csv')), row.names = F)
-  cat('Saving nb of cg loss by age of children by causes ...\n')
-  write.csv(sc.age.all, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('grandparents_deaths_loss_with_age_summary_', cur.yr, '.csv')), row.names = F)
 }
 
 # prob won't use
@@ -789,6 +505,7 @@ process_cg_with_age_of_orphans_cause = function(grandp.data, part.loss, in.dir, 
 
 # double orphans by age of children----
 # update 0827, 0905 hazard computation
+# clean 240516
 compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.input, country, data, d.deaths.pre, v.name)
 {
   # data <- as.data.table(read.csv(file.path(prj.dir, paste0('results/orphans/parents_deaths_orphans_summary_',country,'.csv'))))
@@ -821,6 +538,7 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
   data.double[is.na(Female), Female := 0]
   data.double[is.na(Male), Male := 0]
 
+  # double_orphans here is double new in eq 7b
   data.double[, double_orphans := (Female + Male)/2]
   setnames(data.double, c('Female', 'Male'), c('double.female', 'double.male'))
 
@@ -839,6 +557,7 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
   data.double[is.na(father), father := 0]
   set(data.double, NULL, c('Female', 'Male', 'double.female', 'double.male'), NULL)
 
+  # Until here, orphans = mother + father
   parents.orphans <- copy(data.double)
   data.double <- copy(parents.orphans)
 
@@ -898,11 +617,13 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
     summary(pre.double$double.pre)
     pre.double[is.na(double.pre)]
 
+    # double orphans by sex of parent in the previous years
     pre.double <- as.data.table(reshape2::dcast(pre.double, age+race.eth+state+year+cause.name+child_age~sex, value.var = 'double.pre'))
     pre.double[is.na(Female), Female := 0]
     pre.double[is.na(Male), Male := 0]
 
     data.double <- merge(parents.orphans, pre.double, by = c('age', 'race.eth', 'state', 'year', 'cause.name', 'child_age'), all = T)
+    # removed the previous counted orphans
     data.double[, mother := mother- Female]
     data.double[, father := father - Male]
     data.double[mother < 0 | father < 0]
@@ -912,9 +633,10 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
 
   }
 
-  data.double[, double_orphans := round(double_orphans)]
-  data.double[, mother := round(mother)]
-  data.double[, father := round(father)]
+  # remove the double orphans
+  data.double[, mother := round(mother + double_orphans/2)]
+  data.double[, father := round(father + double_orphans/2)]
+  data.double[, double_orphans := (0)]
 
   # save the orphans file by age of parents
   # tmp <- file.path(prj.dir, paste0(file.path('results', paste0(type.input, '_', v.name), 'parents_age_child_double_new_'), country,'.csv'))
@@ -923,8 +645,10 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
 
   # save d.out for age distribution of orphans
   d.out <- copy(data.double)
-  d.out[, Female := round(mother + double_orphans/2)]
-  d.out[, Male := round(father + double_orphans/2)]
+  # add back double new/2 = ((double new_mother + double new_father)/2 /2) in eq 9
+  # Female and Male correspond to maternal and paternal orphans
+  d.out[, Female := round(mother)]
+  d.out[, Male := round(father)]
   set(d.out, NULL, c('mother', 'father', 'double_orphans'), NULL)
   d.out <- as.data.table(reshape2::melt(d.out, id = c('age', 'race.eth', 'state', 'year', 'cause.name', 'child_age')))
   setnames(d.out, 'variable', 'sex')
@@ -932,6 +656,7 @@ compute_double_orphans_all_causes_all_year <- function(in.dir, prj.dir, type.inp
   part[, gender := sex]
   set(part, NULL, 'orphans', NULL)
   setnames(part, 'value', 'orphans')
+
   # for the age dist of orphans
   part <- part[!(age %in% c("15-19", "20-24", "25-29"))]
   part <- part[, list(orphans = sum(orphans, na.rm = T)),

@@ -2026,7 +2026,7 @@ get_preval_orphans_sex_parents_age_children_all_yr <- function(do.age.children.p
     }
     dt.cum.all <- data.table::rbindlist( dt.cum, use.names = T, fill = T )
     # get the rank number
-    dt.cum.all <- dt.cum.all[cur.yr >= 2016]
+    dt.cum.all <- dt.cum.all[cur.yr >= 2000]
     dt.cum.all[, year := cur.yr]
     dt.cum.all <- dt.cum.all[cur.child.age < 18]
 
@@ -2074,8 +2074,10 @@ get_preval_orphans_sex_parents_age_children_all_yr <- function(do.age.children.p
   dt.cum.all$cause.name <- gsub(' \\(', '\n(', dt.cum.all$cause.name)
   return(dt.cum.all)
 }
+
+
 # for the hist estimates (v0630)
-get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all, show.nb)
+get_preval_cg_loss_age_children_all_yr_old <- function(do.age.children.par.grand.all, show.nb)
 {
   data <- do.age.children.par.grand.all
   data <- data[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
@@ -2187,6 +2189,121 @@ get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all
   return(dt.cum.all)
 }
 
+# 240516 separate for maternal and parental orphanhoods
+get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all, show.nb)
+{
+  if (0)
+  {
+    data <- do.age.children.par.grand.all
+    data <- data[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
+    setnames(data, 'cg.loss', 'all')
+    data[, child.age.group := ifelse(child.age %in% 0:4, '0-4',
+                                     ifelse(child.age %in% 5:9, '5-9', '10-17'))]
+    # reconstruct the data table
+    # adding mother, father for the new requests for Supp Tables
+    data <- data[, list(cause.name,child.age.group,state,child.age,race.eth,year,mother,father,orphans,grandp.loss,all)]
+    data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','child.age.group','state','race.eth','year')))
+
+    data <- data[, list(value = sum(value, na.rm = T)),
+                 by = c('cause.name','child.age.group','state','race.eth',
+                        'year', 'variable')]
+
+    # get the ranking for each cg loss type
+    incid.cat <- list()
+    for (cat.loss in unique(data$variable))
+    {
+      tmp <- get_ranking_id(data[variable == cat.loss], show.nb)
+      # show all causes as long as they appeared in the top
+      # if not in the leading list in some years, leading.causes = F
+      data.tmp <- data[variable == cat.loss]
+
+      incid.cat[[cat.loss]] <- merge(data.tmp, unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
+                                     by = c('state', 'year', 'cause.name','race.eth'), all.x = T)
+      incid.cat[[cat.loss]] [, leading.causes := TRUE]
+      incid.cat[[cat.loss]] [is.na(causes.state.id), leading.causes := FALSE]
+
+
+      incid.cat[[cat.loss]]  <- incid.cat[[cat.loss]] [, list(value = sum(value, na.rm = T)),
+                                                       by = c( 'state', 'year', 'cause.name', 'race.eth',
+                                                               'child.age.group', 'leading.causes', 'variable')]
+      incid.cat[[cat.loss]]  <- merge(incid.cat[[cat.loss]] , unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
+                                      by = c('state', 'year', 'cause.name', 'race.eth'), all.x = T)
+    }
+    incid <- data.table::rbindlist( incid.cat, use.names = T, fill = T )
+    # incid
+    setkey(incid, year, causes.state.id, state)
+    # unique(incid$cause.name)
+  }
+
+  # Now for the prevalence
+  # if(!grepl('-', unique(do.age.children.par.grand.all$year)[1]))
+  # {
+    # prevalence
+    data <- do.age.children.par.grand.all
+    data <- data[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
+    setnames(data, 'cg.loss', 'all')
+    # reconstruct the data table
+    data <- data[, list(cause.name,state,child.age,race.eth,year,mother,father,orphans,grandp.loss,all)]
+    data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','state','race.eth','year')))
+
+    dt.cum <- list()
+    for (yr in unique(data$year))
+    {
+      tmp <- data[year <= yr]
+      tmp <- tmp[, cur.child.age := yr - year + child.age]
+      tmp <- tmp[, list(value = sum(value, na.rm = T)),
+                 by = c('cause.name','state','race.eth','variable','cur.child.age','variable')]
+      tmp[, cur.yr := yr]
+      dt.cum[[yr]] <- tmp
+    }
+    dt.cum.all <- data.table::rbindlist( dt.cum, use.names = T, fill = T )
+    # get the rank number
+    dt.cum.all <- dt.cum.all[cur.yr >= (2000)]
+    dt.cum.all[, year := cur.yr]
+    dt.cum.all <- dt.cum.all[cur.child.age < 18]
+
+    # get the ranking for each cg loss type
+    preval.cat <- list()
+    for (cat.loss in unique(dt.cum.all$variable))
+    {
+      tmp <- get_ranking_id(dt.cum.all[variable == cat.loss], show.nb)
+      # show all causes as long as they appeared in the top
+      # if not in the leading list in some years, leading.causes = F
+      dt.cum.all.tmp <- dt.cum.all[variable == cat.loss]
+
+      preval.cat[[cat.loss]] <- merge(dt.cum.all.tmp, unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
+                                      by = c('state', 'year', 'cause.name','race.eth'), all.x = T)
+
+      preval.cat[[cat.loss]][, leading.causes := TRUE]
+      preval.cat[[cat.loss]][is.na(causes.state.id), leading.causes := FALSE]
+      preval.cat[[cat.loss]][, child.age.group := ifelse(cur.child.age %in% 0:4, '0-4',
+                                                         ifelse(cur.child.age %in% 5:9, '5-9',
+                                                                '10-17'))]
+
+      preval.cat[[cat.loss]] <- preval.cat[[cat.loss]][, list(value = sum(value, na.rm = T)),
+                                                       by = c( 'state', 'year', 'cause.name','race.eth', 'variable', 'leading.causes', 'child.age.group')]
+      preval.cat[[cat.loss]] <- merge(preval.cat[[cat.loss]], unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
+                                      by = c('state', 'year', 'cause.name', 'race.eth'), all.x = T)
+      setkey(preval.cat[[cat.loss]], year, causes.state.id, state)
+      unique(preval.cat[[cat.loss]]$cause.name)
+
+    }
+    preval <- data.table::rbindlist( preval.cat, use.names = T, fill = T )
+    # setnames(incid, 'variable', 'loss.type')
+    setnames(preval, 'variable', 'loss.type')
+    # incid[, variable := "Incidence"]
+    preval[, variable := "Prevalence"]
+    # dt.cum.all <- rbind(incid, preval)
+
+  # }else{
+  #   setnames(incid, 'variable', 'loss.type')
+  #   incid[, variable := "Incidence"]
+  #   dt.cum.all <- copy(incid)
+  # }
+
+  preval$cause.name <- gsub(' \\(', '\n(', preval$cause.name)
+  return(preval)
+}
 # process quantities used for plotting ----
 # get the rank based on key quantity
 get_ranking = function(pd)
@@ -2917,12 +3034,62 @@ process_national_map_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, pr
     xlab('') +
     ylab('US total') +
     labs(fill =
+           paste0('Leading parental causes-of-death')
+         # paste0('Causes of children experiencing death of a ', contrib.name)
+    ) +
+     theme(legend.position = "bottom",
+          # panel.grid.major = element_blank(),
+          # panel.grid.minor = element_blank(),
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, face = 'bold', family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          panel.background = element_blank(),
+          strip.background = element_blank(),
+          # legend.title = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    )
+  return(p)
+}
+
+# 240516
+process_national_orphans_grandp <- function(tmp)
+{
+  pd <- copy(tmp)
+  pd$year <- as.character(pd$year)
+  unique(pd$variable)
+  pd[, variable := ifelse(variable == 'mother', 'Mother',
+                          ifelse(variable == 'father', 'Father',
+                                 ifelse(variable == 'grandp.loss', 'Grandparent caregiver', NA)))]
+  pd <- pd[!is.na(variable)]
+  par <- unique(pd$variable)
+  col.par <- c('#f768a1', '#41b6c4',  '#7876B1FF')
+  p <- ggplot(pd[year >= 2000],
+              aes(x = year, y = value, fill = factor(variable, levels = par))
+  ) +
+    geom_bar(data = pd,
+             aes(x = year, y = value, fill = factor(variable, levels = par)),
+             stat = 'identity', colour="black", linewidth = .3, alpha = .65) +
+    scale_fill_manual(values = alpha(col.par, 0.7)) +
+    scale_y_continuous(limits = c(0, NA),
+                       labels = scales::comma
+                       ,
+                       expand = expansion(mult = c(0, 0.01))
+    ) +
+    scale_x_discrete(breaks = min(unique(pd$year)):2022, labels = min(unique(pd$year)):2022) +
+    scale_colour_manual(values = c('black', 0)) +
+    theme_bw() +
+    guides(colour = 'none') +
+    xlab('') +
+    ylab('US total') +
+    labs(fill =
            paste0('Cause')
          # paste0('Causes of children experiencing death of a ', contrib.name)
     ) +
-    # labs(fill = paste0('Leading ', show.nb, ' causes of ', tp.title,'\nin each year')) +
-    # guides(fill = guide_legend(override.aes = list(pattern = c('stripe', 'stripe', rep('none', length(cn) - 2))))) +
-    theme(legend.position = "bottom",
+      theme(legend.position = "bottom",
           # panel.grid.major = element_blank(),
           # panel.grid.minor = element_blank(),
           axis.title = element_text(size = 16),
@@ -2940,6 +3107,53 @@ process_national_map_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, pr
   return(p)
 }
 
+process_national_lines_orphans_grandp <- function(tmp.parent.line)
+{
+  pd <- copy(tmp.parent.line)
+  pd[, year := as.character(year)]
+  pd[, variable := ifelse(variable == 'mother', 'Mother',
+                          ifelse(variable == 'father', 'Father',
+                                 ifelse(variable == 'grandp.loss', 'Grandparent caregiver', NA)))]
+  pd <- pd[!is.na(variable)]
+  par <- unique(pd$variable)
+  col.par <- c('#f768a1', '#41b6c4', '#7876B1FF')
+
+  p <- ggplot(pd[year >= 2000],
+              aes(x = year, y = value, group = variable, col = factor(variable, levels = par),
+                  shape = factor(variable, levels = par)), alpha = .65) +
+    geom_line(linewidth = 1) +
+    geom_point(size = 3) +
+    scale_colour_manual(values = col.par) +
+    scale_shape_manual(values = c(17,16, 15,  18, 19), drop = T) +
+    scale_y_continuous(limits = c(0, NA),
+                       labels = scales::comma
+                       ,
+                       expand = expansion(mult = c(0, 0.01))
+    ) +
+    scale_x_discrete(breaks = min(unique(pd$year)):2022, labels = min(unique(pd$year)):2022) +
+    theme_bw() +
+     xlab('') +
+    ylab('US total') +
+    labs(col = paste0('Type of caregiver'),
+         shape = 'Type of caregiver'
+    ) +
+     theme(legend.position = "bottom",
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          panel.background = element_blank(),
+          strip.background = element_blank(),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)
+    )
+  return(p)
+}
+
+
+# previous
 process_national_lines_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, prj.dir, title.input, type.input)
 {
   if (grepl('cg_loss', par))
@@ -2966,10 +3180,6 @@ process_national_lines_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, 
 
   }
   # whole US.
-  # pd <- copy(do.all)
-  # # filter top 5 causes based on the caregiver loss
-  # pd <- get_ranking_id(pd, show.nb)
-  # pd <- copy(tmp.parent)
   pd <- copy(do.all)
   pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
   pd$cause.name <- gsub('\\*', '', pd$cause.name)
@@ -2997,6 +3207,8 @@ process_national_lines_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, 
   pd$cause.name <- factor(pd$cause.name, levels = cn)
   setkey(pd, year, cause.name)
 
+  unique(pd$cause.name)
+
   # update the cause name
   change.tmp <- update_single_cause_name(pd, cn)
 
@@ -3016,10 +3228,6 @@ process_national_lines_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, 
     geom_line(linewidth = 1) +
     geom_point(size = 3) +
     scale_colour_manual(values = col.in) +
-    # scale_y_continuous(
-    #   # limits = c(0, NA),
-    #   #                  expand = expansion(mult = c(0, 0.01)),
-    #                    labels = scales::comma)
     scale_y_continuous(limits = c(0, NA),
                        labels = scales::comma
                        ,
@@ -3027,27 +3235,20 @@ process_national_lines_orphans_vsplit <- function(show.nb, pl.tab, par, do.all, 
     ) +
     scale_x_discrete(breaks = min(unique(pd$year)):2022, labels = min(unique(pd$year)):2022) +
     theme_bw() +
-    # geom_text(
-    #   aes(label = rate),
-    #   position = position_stack(vjust = 0.5),
-    #   size = 4.5,
-    #   col = 'white'
-    # ) +
     xlab('') +
     ylab('US total') +
     labs(col =
-           paste0('Cause')
+           paste0('Leading parental causes-of-death')
          # paste0('Causes of children experiencing death of a ', contrib.name)
     ) +
-    # labs(fill = paste0('Leading ', show.nb, ' causes of ', tp.title,'\nin each year')) +
-    # guides(fill = guide_legend(override.aes = list(pattern = c('stripe', 'stripe', rep('none', length(cn) - 2))))) +
-    theme(legend.position = "bottom",
+    guides(colour = guide_legend(order = 1)) +
+      theme(legend.position = "bottom",
           # panel.grid.major = element_blank(),
           # panel.grid.minor = element_blank(),
           axis.title = element_text(size = 16),
           axis.text = element_text(size=13, family='sans'),
           text=element_text(size=16,family='sans'),
-          legend.title=element_text(size=15, family='sans'),
+          legend.title=element_text(size=15, face = "bold", family='sans'),
           legend.text=element_text(size=13, family='sans'),
           legend.key.size = unit(16, 'pt'),
           strip.text = element_text(size = 16),
@@ -4043,11 +4244,162 @@ plot_contribution_orphan_deaths_national_bars_vsplit <- function(pl.tab, tmp, pa
     labs(fill = 'Cause',
          pattern = ''
     ) +
-    theme(legend.position = 'right',
+    theme(legend.position = 'left',
           axis.title = element_text(size = 16),
           axis.text = element_text(size=13, family='sans'),
           text=element_text(size=16,family='sans'),
-          legend.title=element_text(size=15, family='sans'),
+          legend.title=element_text(size=15, face = "bold", family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+
+    )
+
+  return(p.contrib)
+}
+
+plot_contribution_orphan_deaths_national_bars_vsplit_ci <- function(pl.tab, tmp, par, prj.dir, title.input,type.input)
+{
+  # just show year 2021
+  if (grepl('cg_loss', par))
+  {
+    tp.title <- "children experiencing\ncaregiver death"
+    contrib.name <- "caregiver"
+  }
+  if (grepl('parents', par))
+  {
+    tp.title <- "children experiencing\nparental death"
+    contrib.name <- "parental"
+
+  }
+  if (grepl('grandparent', par))
+  {
+    tp.title <- "children experiencing\ngrandparental death"
+    contrib.name <- "grandparental"
+
+  }
+
+  pd <- copy(tmp)
+  pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
+  pd$cause.name <- gsub('\\*', '', pd$cause.name)
+
+  # setkey(pd, year, causes.state.id, state)
+  # order the colour based on the id
+  pd.cn <- unique(pd$cause.name)
+  # put the self-harm as the end
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('Accidents', pd.cn) | grepl('self-harm', pd.cn) | grepl('Assault', pd.cn) | grepl('Other', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+  tmp  <- merge(data.table(cn = cn, id = seq_len(length(cn))), pl.tab, by = 'cn', all.x = T)
+  setkey(tmp, id)
+  col.in <- tmp$col.in
+
+  pd$cause.name <- factor(pd$cause.name, levels = cn)
+  setkey(pd, cause.name)
+
+  pd$year <- as.character(pd$year)
+
+  # change the cause names
+  tp.name <- update_single_cause_name(pd, cn)
+  pd <- tp.name$pd
+  cn <- tp.name$cn
+  tp.name <- update_homicide_accident_cause_name(pd, cn)
+  pd <- tp.name$pd
+  cn <- tp.name$cn
+
+  tp.name <- update_mental_cause_name(pd, cn)
+  pd <- tp.name$pd
+  cn <- tp.name$cn
+
+  # change the name of the variables
+  pd[, variable := ifelse(grepl('death', variable), "contribution to deaths",
+                          paste0("contribution to children newly\nexperiencing ", contrib.name, ' death'))]
+
+  pd[, contrib := format(round(value, 1), digits = 1, nsmall = 1)]
+  pd[, contrib := as.character(contrib)]
+  pd[, contrib := paste0(contrib, '%')]
+  # plot the death number on the other side
+  pd[grepl('deaths', variable), value := -value]
+
+  # won't show cause in the x without value
+  cn.show <- cn
+  # [cn != "Human immunodeficiency virus"]
+
+  # add error bars
+  pd.bar <- copy(pd)
+  pd.bar <- as.data.table(reshape2::dcast(pd, variable+cause.name~state, value.var = 'value'))
+
+  setnames(pd, 'state', 'stat')
+  p.contrib <- ggplot(pd[stat == 'M'], aes(x = factor(cause.name, levels = rev(cn)), y = abs(value),
+                              fill = factor(cause.name, levels = rev(cn)),
+                              pattern = factor(variable))) +
+    ggpattern::geom_bar_pattern(
+      aes(x = factor(cause.name, levels = rev(cn)), y = value,
+          fill = factor(cause.name, levels = rev(cn)),
+          pattern = factor(variable)),
+      stat = 'identity',
+      width = 0.5,
+      color = NA,
+      pattern_fill = "black",
+      pattern_angle = 45,
+      pattern_density = 0.1,
+      pattern_spacing = 0.025,
+      pattern_key_scale_factor = 0.6) +
+    ggpattern::scale_pattern_manual(values = c( 'none' ,
+                                                'stripe' )) +
+    theme_bw() +
+    geom_hline(yintercept = 0, colour="white", lwd = .5) +
+
+    geom_errorbar(data = pd.bar,
+                  aes(x = factor(cause.name, levels = rev(cn)),
+                      y = M, ymin = CL, ymax = CU),
+                  col = 'grey30', linetype = 1, linewidth = .68, size = .1, width = .3) +
+
+    geom_text(data = pd[grepl('deaths', variable) & stat == 'M'],
+              aes(x = factor(cause.name, levels = rev(cn)), y = value, label = contrib),
+              hjust = 1.6,
+              size = 4,
+              col = 'black'
+    ) +
+    geom_text(data = pd[!(grepl('deaths', variable)) & stat == 'M'],
+              aes(x = factor(cause.name, levels = rev(cn)), y = value, label = contrib),
+              hjust = -.4,
+              size = 4,
+              col = 'black'
+              # ,
+              # angle = 90
+    ) +
+    guides(
+      fill = guide_legend(title.position="top", title.hjust = 0.5,
+                          ncol = 1, reverse = TRUE,
+                          override.aes = list(pattern = 'none', size = .1)),
+      pattern = 'none'
+      # pattern = guide_legend(nrow = 2,
+      #                        override.aes = list(fill = NA, color = "black", size = .1))
+    ) +
+    scale_fill_manual(values = alpha(rev(col.in), 0.7), drop = F) +
+    scale_colour_manual(values = c('black', 0)) +
+    scale_y_continuous(limits = c(-35, 30),
+                       breaks = seq(-35, 30, 5),
+                       labels = c(35, 30, 25, 20, 15, 10, 5, 0, 5, 10, 15, 20, 25, 30)
+    ) +
+    scale_x_discrete(breaks = pd[!is.na(value)]$cause.name, labels = pd[!is.na(value)]$cause.name) +
+
+    # scale_x_discrete(
+    #   breaks = rev(cn.show), labels = rev(cn.show),
+    #                  drop = T) +
+    xlab('') +
+    ylab("Percent (%) in year 2021") +
+    coord_flip() +
+    labs(fill = 'Cause',
+         pattern = ''
+    ) +
+    theme(legend.position = 'left',
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, face = "bold", family='sans'),
           legend.text=element_text(size=13, family='sans'),
           legend.key.size = unit(16, 'pt'),
           strip.text = element_text(size = 16),
@@ -5592,7 +5944,89 @@ prevalence_rate_national_bar_ci_total <- function(pl.tab, par, dt, prj.dir, titl
     )
   return(p)
 }
+# 240510
+prevalence_rate_national_bar_ci_total_col_update <- function(pl.tab, par,  dt.prev.orphans.age, prj.dir, title.input, type.input)
+{
+  # whole US.
+  # show the total burden for all causes by age of children
+  pd <- copy( dt.prev.orphans.age)
 
+  pd <- unique(pd[, list(year, age.group,  value, variable, cause.name, stat)])
+  # pd$cause.name <- factor(pd$cause.name, levels = cn)
+  setkey(pd, year, cause.name)
+  setkey(pd, age.group)
+  age.cat <- unique(pd$age.group)
+
+  pd[, cause.name := 'Total']
+  pd <- pd[, list(value = sum(value, na.rm = T)),
+           by = c( 'year', 'cause.name', 'variable', 'age.group', 'stat')]
+  pd <- as.data.table(reshape2::dcast(pd,
+                                      year+age.group+cause.name+variable~stat, value.var = 'value'))
+
+  pd[, age.group.id := age.group]
+  pd[year < 2021, age.group.id := '']
+  # col.in <-  c('#e78ac3','#fc8d62', '#66c2a5','#8da0cb')
+  # col.in <-  c('#fc8d62', '#66c2a5','#8da0cb')
+  col.in <-  c('#80cbc4', '#28a99e','#037c6e')
+  col.in <- c('#85dfeae5', '#1cc3d8e5', '#009eb0e5') # cyan
+  col.in <- c('#B39DDB', '#5E35B1', '#311B92')
+  col.in <- c('#85D2AF', '#2CA765', '#04691A')
+
+
+  setkey(pd, age.group)
+  pd[grepl('Ages 0-17', age.group), M := NA]
+  pd[grepl('Ages 0-17', age.group), CU := NA]
+  pd[grepl('Ages 0-17', age.group), CL := NA]
+  pd[year %in% c(seq(2000, 2021, 5), 2021), plt.bar := TRUE]
+  pd[, plt.size := T]
+  pd[grepl('Ages 0-4', age.group) & plt.bar == TRUE, plt.size := F]
+  pd[plt.bar == TRUE, plt.size := F]
+
+  p <- ggplot(pd, aes(x = as.integer(year), y = M, group = age.group, col = factor(age.group , levels = age.cat), label = factor(age.group , levels = age.cat))) +
+    geom_errorbar(data = pd[plt.bar == TRUE],
+                    aes(x = as.integer(year), ymin = CL, ymax = CU), col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+
+    geom_line(aes(y = M, colour = factor(age.group , levels = age.cat)), linewidth = .8) +
+    geom_point(data = pd[plt.size == T], size = 3,
+               aes(shape = factor(age.group , levels = age.cat))) +
+    geom_point(data = pd[plt.size == F], size = 2,
+               aes(shape = factor(age.group , levels = age.cat))) +
+    facet_grid(.~paste0('')) +
+    # scale_fill_material('cyan')
+    scale_colour_manual(values = col.in, drop = T) +
+    scale_fill_manual(values = col.in, drop = T) +
+    scale_shape_manual(values = c(18,16,17), drop = T) +
+
+    scale_x_continuous(
+      # breaks = seq(min(pd$year), max(pd$year), 5),
+      # guide = "prism_minor",
+      minor_breaks = seq(min(pd$year), max(pd$year), 1)) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.1))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
+    theme_bw() +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children\nby age of child") +
+    labs(col = 'Age groups of children', fill = 'Age groups of children') +
+    guides(colour = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+           fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)) +
+    theme(legend.position = "none",
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
+
+          panel.background = element_blank(),
+          strip.background = element_blank()
+    )
+  return(p)
+}
 # version update 0626
 incidence_rate_change_rate_bubble_age_children_by_cause <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
 {
@@ -6255,6 +6689,479 @@ prevalence_rate_national_bar_race_ci_total <- function(pl.tab, par, dt, prj.dir,
     )
   return(p)
 }
+
+# 240510
+prevalence_rate_national_bar_race_ci_total_col_update <- function(pl.tab, par, dt.prev.orphans.race, prj.dir, title.input, type.input)
+{
+  if (grepl('cg_loss', par))
+  {
+    tp.title <- "children experiencing\ncaregiver death"
+    contrib.name <- "caregiver"
+
+  }
+  # if (grepl('secondary', par))
+  # {
+  #   tp.title <- "children experiencing\ndeath of a secondary caregiver"
+  # }
+  if (grepl('parent', par))
+  {
+    tp.title <- "children experiencing\nparental death"
+    contrib.name <- "parental"
+
+  }
+  if (grepl('grandparent', par))
+  {
+    tp.title <- "children experiencing\ngrandparental death"
+    contrib.name <- "grandparental"
+  }
+  if (grepl('all-type-loss', par))
+  {
+    tp.title <- "children's\ncg loss"
+  }
+  if (grepl('incid', par))
+  {
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of children newly experiencing\n', contrib.name, ' death per 100 children')
+    }else{
+      row.title <- paste0('Number of children newly experiencing\n', contrib.name, ' death per year')
+    }
+  }
+  if (grepl('prev', par))
+  {
+    # lab.name <- paste0('Causes or combination of causes of children\nexperiencing ', contrib.name, ' death')
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of cumulative burden of\n', contrib.name, " death per 100 children")
+    }else{
+      row.title <- paste0('Cumulative burden of\n', contrib.name, " death")
+
+    }
+
+  }
+  # whole US.
+  # show the total burden for all causes by age of children
+  pd <- copy(dt.prev.orphans.race)
+  pd$year <- as.character(pd$year)
+
+  pd <- unique(pd[, list(year, race.eth,  value, variable, cause.name, stat)])
+  # pd$cause.name <- factor(pd$cause.name, levels = cn)
+  setkey(pd, year, cause.name)
+
+  pd[, cause.name := 'Total']
+  pd <- pd[, list(value = sum(value, na.rm = T)),
+           by = c( 'year', 'cause.name', 'variable', 'race.eth', 'stat')]
+  pd[, race.eth := gsub(' or ', '\n', race.eth)]
+  tmp <- as.data.table(expand.grid(
+    year = (unique(pd$year)),
+    race.eth = unique(pd$race.eth)))
+  pd <- merge(tmp, pd, by = c('year', 'race.eth'), all = T)
+  pd[is.na(value), value := 0]
+
+  pd <- as.data.table(reshape2::dcast(pd,
+                                      year+cause.name+variable+race.eth~stat, value.var = 'value'))
+
+
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c("Hispanic" ,
+                                   "Non-Hispanic American Indian\nAlaska Native",
+                                   "Non-Hispanic Asian" ,
+                                   "Non-Hispanic Black" ,
+                                   "Non-Hispanic White",
+                                   "Others"))
+  # jco
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "grey70" , '#4A6990FF')
+  col.race <- c('#F44336', '#E91E63', "#9C27B0", '#3F51B5', "#2196F3")
+  col.race <- c('#FF9800',  '#F44336','#4CAF50',  "#2196F3", "#AFB42B")
+  col.race <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+  col.race.bar <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+
+  # "#D3D3D3"
+  # col.race <- c('#EFC000FF', '#7AA6DCFF', '#CD534CFF', '#8F7700FF', '#868686FF', '#4A6990FF')
+  # col.race <- c("#D49464FF", "#00A1D5FF", "#B24745FF", "#374E55FF", "#ADB6B6FF", "#79AF97FF")
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  pd[, race.eth.id := race.eth]
+
+  pd[, year := as.numeric(year)]
+  pd[year < 2021, race.eth.id := '']
+
+  pd[year %in% c(seq(2000, 2021, 5), 2021), plt.bar := TRUE]
+
+  # To aviod the overlapping...
+  # the AIAN: use the true value
+  # white ppl: before 2015, move + .08
+  # hispanic: 2000 move + .08
+  # black 2010-2015: - .08
+
+  # if we moved the error bars, we wont plot the dots
+  pd[, plt.dot := T]
+
+  # Thinking move every race.eth
+  # AIAN move 1 year forward:
+  # White move 2 years forward:
+  # black move 1 year back (4 years forward):
+  # hispanic move 3 years foreward
+
+  pd[grepl('Alaska', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  pd.tmp <- pd[year %in% c(seq(2000, 2020, 5)+2) & (grepl('Alaska', race.eth))]
+  pd.tmp[, plt.bar := T]
+  # pd.tmp2[, year := year + 0.12]
+  # pd.tmp <- rbind(pd.tmp, pd.tmp2)
+
+  pd[race.eth == 'Hispanic' & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[race.eth == 'Hispanic' & year %in% c(seq(2000, 2020, 5)), plt.dot := F]
+
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5) + 1) & race.eth == 'Hispanic' ]
+  pd.tmp2[, plt.bar := T]
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  # pd.tmp[, year := year + 0.12]
+  #
+  pd[grepl('White', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[grepl('White', race.eth) & year %in% c(seq(2000, 2015, 5)), plt.dot := F]
+
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5)+3) & (grepl('White', race.eth))]
+  pd.tmp2[, plt.bar := T]
+  # pd.tmp2[, year := year + 0.12]
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  #
+  pd[grepl('Black', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[grepl('Black', race.eth) & year %in% c(seq(2010, 2021, 5)), plt.dot := F]
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5) + 4) & (grepl('Black', race.eth))]
+  pd.tmp2[, plt.bar := T]
+  # pd.tmp2[, year := year - 0.12]
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  pd.tmp[plt.bar == T, plt.dot := F]
+  p <- ggplot(pd, aes(x = (year), y = M, group = race.eth,
+                      col = factor(race.eth , levels = race.cat),
+                      label = race.eth)) +
+    # geom_ribbon(aes(ymin = CL, ymax = CU, fill = factor(race.eth , levels = race.cat)), alpha = 0.4,
+    #             colour = "transparent") +
+    # geom_pointrange``
+    geom_errorbar(data = pd[(plt.bar == TRUE)],
+                    aes(x = as.integer(year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)), col = 'grey30',linetype = 1, linewidth = .4, size = .1, width = .5) +
+    geom_errorbar(data = pd.tmp[!(grepl('Alaska', race.eth))],
+                    aes(x = (year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)),col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+    geom_errorbar(data = pd.tmp[(grepl('Alaska', race.eth))],
+                    aes(x = (year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)),col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+
+    geom_line(aes(y = M, colour = factor(race.eth , levels = race.cat)), linewidth = .8) +
+    geom_point(data = pd[plt.dot == T], size = 3, aes(shape = factor(race.eth , levels = race.cat))) +
+    scale_colour_manual(values = col.race, drop = T) +
+    scale_fill_manual(values = col.race, drop = T) +
+    scale_shape_manual(values = c(15, 16, 17, 18, 19), drop = T) +
+
+    scale_x_continuous(
+      # breaks = seq(min(pd$year), max(pd$year), 5),
+      # guide = "prism_minor",
+      minor_breaks = seq(min(pd$year), max(pd$year), 1)) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.05))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
+    theme_bw() +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children\nby race & ethnicity of parent/child") +
+    labs(col = 'Standardized race & ethnicity', fill = 'Standardized race & ethnicity') +
+    facet_grid(.~paste0('')) +
+    guides(colour = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+           fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)) +
+    theme(legend.position = "none",
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
+
+          panel.background = element_blank(),
+          strip.background = element_blank()
+    )
+  return(p)
+}
+prevalence_rate_national_bar_race_ci_total_col_update <- function(pl.tab, par, dt.prev.orphans.race, prj.dir, title.input, type.input)
+{
+  if (grepl('cg_loss', par))
+  {
+    tp.title <- "children experiencing\ncaregiver death"
+    contrib.name <- "caregiver"
+
+  }
+  # if (grepl('secondary', par))
+  # {
+  #   tp.title <- "children experiencing\ndeath of a secondary caregiver"
+  # }
+  if (grepl('parent', par))
+  {
+    tp.title <- "children experiencing\nparental death"
+    contrib.name <- "parental"
+
+  }
+  if (grepl('grandparent', par))
+  {
+    tp.title <- "children experiencing\ngrandparental death"
+    contrib.name <- "grandparental"
+  }
+  if (grepl('all-type-loss', par))
+  {
+    tp.title <- "children's\ncg loss"
+  }
+  if (grepl('incid', par))
+  {
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of children newly experiencing\n', contrib.name, ' death per 100 children')
+    }else{
+      row.title <- paste0('Number of children newly experiencing\n', contrib.name, ' death per year')
+    }
+  }
+  if (grepl('prev', par))
+  {
+    # lab.name <- paste0('Causes or combination of causes of children\nexperiencing ', contrib.name, ' death')
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of cumulative burden of\n', contrib.name, " death per 100 children")
+    }else{
+      row.title <- paste0('Cumulative burden of\n', contrib.name, " death")
+
+    }
+
+  }
+  # whole US.
+  # show the total burden for all causes by age of children
+  pd <- copy(dt.prev.orphans.race)
+  pd$year <- as.character(pd$year)
+
+  pd <- unique(pd[, list(year, race.eth,  value, variable, cause.name, stat)])
+  # pd$cause.name <- factor(pd$cause.name, levels = cn)
+  setkey(pd, year, cause.name)
+
+  pd[, cause.name := 'Total']
+  pd <- pd[, list(value = sum(value, na.rm = T)),
+           by = c( 'year', 'cause.name', 'variable', 'race.eth', 'stat')]
+  pd[, race.eth := gsub(' or ', '\n', race.eth)]
+  tmp <- as.data.table(expand.grid(
+    year = (unique(pd$year)),
+    race.eth = unique(pd$race.eth)))
+  pd <- merge(tmp, pd, by = c('year', 'race.eth'), all = T)
+  pd[is.na(value), value := 0]
+
+  pd <- as.data.table(reshape2::dcast(pd,
+                                      year+cause.name+variable+race.eth~stat, value.var = 'value'))
+
+
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c("Hispanic" ,
+                                   "Non-Hispanic American Indian\nAlaska Native",
+                                   "Non-Hispanic Asian" ,
+                                   "Non-Hispanic Black" ,
+                                   "Non-Hispanic White",
+                                   "Others"))
+  # jco
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "grey70" , '#4A6990FF')
+  col.race <- c('#F44336', '#E91E63', "#9C27B0", '#3F51B5', "#2196F3")
+  col.race <- c('#FF9800',  '#F44336','#4CAF50',  "#2196F3", "#AFB42B")
+  col.race <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+  col.race.bar <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+
+  # "#D3D3D3"
+  # col.race <- c('#EFC000FF', '#7AA6DCFF', '#CD534CFF', '#8F7700FF', '#868686FF', '#4A6990FF')
+  # col.race <- c("#D49464FF", "#00A1D5FF", "#B24745FF", "#374E55FF", "#ADB6B6FF", "#79AF97FF")
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  pd[, race.eth.id := race.eth]
+
+  pd[, year := as.numeric(year)]
+  pd[year < 2021, race.eth.id := '']
+
+  pd[year %in% c(seq(2000, 2021, 5), 2021), plt.bar := TRUE]
+
+  # To aviod the overlapping...
+  # the AIAN: use the true value
+  # white ppl: before 2015, move + .08
+  # hispanic: 2000 move + .08
+  # black 2010-2015: - .08
+
+  # if we moved the error bars, we wont plot the dots
+  pd[, plt.dot := T]
+
+  # Thinking move every race.eth
+  # AIAN move 1 year forward:
+  # White move 2 years forward:
+  # black move 1 year back (4 years forward):
+  # hispanic move 3 years foreward
+
+  pd[grepl('Alaska', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  pd.tmp <- pd[year %in% c(seq(2000, 2020, 5)+2) & (grepl('Alaska', race.eth))]
+  pd.tmp[, plt.bar := T]
+  pd.tmp[, plt.dot := F]
+
+  # pd.tmp2[, year := year + 0.12]
+  # pd.tmp <- rbind(pd.tmp, pd.tmp2)
+
+  pd[race.eth == 'Hispanic' & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[race.eth == 'Hispanic' & year %in% c(seq(2000, 2020, 5)), plt.dot := F]
+
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5) + 1) & race.eth == 'Hispanic' ]
+  pd.tmp2[, plt.bar := T]
+  pd.tmp2[, plt.dot := F]
+
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  # pd.tmp[, year := year + 0.12]
+  #
+  pd[grepl('White', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[grepl('White', race.eth) & year %in% c(seq(2000, 2015, 5)), plt.dot := F]
+
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5)+3) & (grepl('White', race.eth))]
+  pd.tmp2[, plt.bar := T]
+  pd.tmp2[, plt.dot := F]
+
+  # pd.tmp2[, year := year + 0.12]
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  #
+  pd[grepl('Black', race.eth) & year %in% c(seq(2000, 2020, 5)), plt.bar := F]
+  # pd[grepl('Black', race.eth) & year %in% c(seq(2010, 2021, 5)), plt.dot := F]
+  pd.tmp2 <- pd[year %in% c(seq(2000, 2020, 5) + 4) & (grepl('Black', race.eth))]
+  pd.tmp2[, plt.bar := T]
+  pd.tmp2[, plt.dot := F]
+
+  # pd.tmp2[, year := year - 0.12]
+  pd.tmp <- rbind(pd.tmp, pd.tmp2)
+  pd.tmp[plt.bar == T, plt.dot := F]
+
+  p <- ggplot(pd, aes(x = (year), y = M, group = race.eth,
+                      col = factor(race.eth , levels = race.cat),
+                      label = race.eth)) +
+    # geom_ribbon(aes(ymin = CL, ymax = CU, fill = factor(race.eth , levels = race.cat)), alpha = 0.4,
+    #             colour = "transparent") +
+    # geom_pointrange``
+    geom_errorbar(data = pd[(plt.bar == TRUE)],
+                  aes(x = as.integer(year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)), col = 'grey30',linetype = 1, linewidth = .4, size = .1, width = .5) +
+    geom_errorbar(data = pd.tmp[!(grepl('Alaska', race.eth))],
+                  aes(x = (year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)),col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+    geom_errorbar(data = pd.tmp[(grepl('Alaska', race.eth))],
+                  aes(x = (year), ymin = CL, ymax = CU, col = factor(race.eth , levels = race.cat)),col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+
+    geom_line(aes(y = M, colour = factor(race.eth , levels = race.cat)), linewidth = .8) +
+    geom_point(data = pd[plt.dot == T], size = 3, aes(shape = factor(race.eth , levels = race.cat))) +
+    scale_colour_manual(values = col.race, drop = T) +
+    scale_fill_manual(values = col.race, drop = T) +
+    scale_shape_manual(values = c(15, 16, 17, 18, 19), drop = T) +
+
+    scale_x_continuous(
+      # breaks = seq(min(pd$year), max(pd$year), 5),
+      # guide = "prism_minor",
+      minor_breaks = seq(min(pd$year), max(pd$year), 1)) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.05))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
+    theme_bw() +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children\nby race & ethnicity of parent/child") +
+    labs(col = 'Standardized race & ethnicity', fill = 'Standardized race & ethnicity') +
+    facet_grid(.~paste0('')) +
+    guides(colour = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+           fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)) +
+    theme(legend.position = "none",
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+    )
+  return(p)
+}
+prevalence_national_bar_sex_parent_ci_total_col_update <- function(par, dt.prev.orphans.sex)
+{
+  # whole US.
+  # show the total burden for all causes by age of children
+  pd <- copy(dt.prev.orphans.sex)
+  # pd$year <- as.character(pd$year)
+
+  pd <- unique(pd[, list(year, value, loss.type, stat)])
+  setkey(pd, year, loss.type)
+
+  pd[, cause.name := 'Total']
+  pd[, variable := loss.type]
+  pd[, variable := ifelse(variable == 'father', 'Father', 'Mother')]
+  pd <- pd[, list(value = sum(value, na.rm = T)),
+           by = c( 'year', 'cause.name', 'variable', 'stat')]
+  pd[is.na(value), value := 0]
+
+  pd <- as.data.table(reshape2::dcast(pd,
+                                      year+cause.name+variable~stat, value.var = 'value'))
+
+  col.sex <- c('#41b6c4', '#f768a1')
+  pd[year %in% c(seq(2000, 2021, 5), 2021), plt.bar := T]
+  pd[, plt.size := T]
+  pd[year %in% c(seq(2000, 2021, 5), 2021), plt.size := F]
+
+
+
+  fac.sex <- c('Father', 'Mother')
+
+
+  p <- ggplot(pd, aes(x = (year), y = M, group = variable,
+                      col = factor(variable, levels = fac.sex),
+                      label = variable)) +
+     geom_errorbar(data = pd[plt.bar == T],
+                    aes(x = (year), ymin = CL, ymax = CU), col = 'grey30', linetype = 1, linewidth = .4, size = .1, width = .5) +
+
+    geom_line(aes(y = M, colour = factor(variable, levels = fac.sex)), linewidth = .8) +
+    geom_point(data = pd[plt.size == T], size = 3, aes(shape = variable)) +
+    geom_point(data = pd[plt.size == F], size = 2, aes(shape = variable)) +
+
+    scale_colour_manual(values = col.sex, drop = T) +
+    scale_fill_manual(values = col.sex, drop = T) +
+    scale_x_continuous(
+      # breaks = seq(min(pd$year), max(pd$year), 5),
+      # guide = "prism_minor",
+      minor_breaks = seq(min(pd$year), max(pd$year), 1)) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.1))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
+    theme_bw() +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children\nby sex of parent") +
+    labs(col = 'Sex of parents', fill = 'Sex of parents') +
+    facet_grid(.~paste0('')) +
+    guides(colour = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+           fill = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)) +
+    # ggrepel::geom_text_repel(
+    #   aes(label = race.eth.id,
+    #       size = 3
+    #   ),
+    #   col = 'black',
+    #   show.legend = FALSE
+    # ) +
+    # guides(col = guide_legend(ncol = 1)) +
+    theme(legend.position = "none",
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
+
+          panel.background = element_blank(),
+          strip.background = element_blank()
+    )
+  # p
+  return(p)
+}
 # version update 0628
 # facet by race.eth
 incidence_rate_change_rate_bubble_race_children_by_cause <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
@@ -6778,6 +7685,914 @@ incidence_rate_change_rate_bubble_sex_part_race_children_by_cause <- function(pl
     )
 
   return(p2d.diff)
+}
+
+# 240514 separate for each sex of parents based on 230629 version
+incidence_rate_change_rate_bubble_each_sex_part_race_children_by_cause_same_size <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
+{
+  if (grepl('cg_loss', par))
+  {
+    tp.title <- "children experiencing\ncaregiver death"
+    contrib.name <- "caregiver"
+  }
+
+  if (grepl('parent', par))
+  {
+    tp.title <- "children experiencing\nparental death"
+    contrib.name <- "parental"
+  }
+  if (grepl('grandparent', par))
+  {
+    tp.title <- "children experiencing\ngrandparental death"
+    contrib.name <- "grandparental"
+  }
+  if (grepl('all-type-loss', par))
+  {
+    tp.title <- "children's\ncg loss"
+  }
+  if (grepl('incid', par))
+  {
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of children newly experiencing\n', contrib.name, ' death per 100 children')
+    }else{
+      row.title <- paste0('Number of children newly experiencing\n', contrib.name, ' death per year')
+    }
+  }
+  if (grepl('prev', par))
+  {
+    row.title <- paste0('Cumulative burden of\n', contrib.name, " death")
+    # lab.name <- paste0('Causes or combination of causes of children\nexperiencing ', contrib.name, ' death')
+  }
+  # whole US.
+  pd <- copy(dt.cum.all.age.in)
+  pd.rk <- pd[, ttl := sum(`2021`, na.rm = T),
+              by = 'cause.name']
+  pd.rk[, rank.value := -ttl]
+  setkey(pd.rk, rank.value)
+  pd.rk[, cause.name := gsub('\\*', '', cause.name)]
+  pd.cn <- unique(pd.rk$cause.name)
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('self-harm', pd.cn) | grepl('Other', pd.cn) | grepl('Accidents', pd.cn) | grepl('Assault', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+
+  tmp  <- merge(data.table(cn = cn, id = seq_len(length(cn))), pl.tab, by = 'cn', all.x = T)
+  setkey(tmp, id)
+  tmp[is.na(col.in), col.in := 'grey50']
+
+  # add the id of the cause
+  pd <- merge(pd, tmp, by.x = 'cause.name', by.y = 'cn', all.x = T)
+  setkey(pd, id)
+  col.in <- tmp$col.in
+  cn <- gsub('\\\n.*', '', tmp$cn)
+  cn <- gsub('\\*', '', cn)
+
+  pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
+  pd$cause.name <- gsub('\\*', '', pd$cause.name)
+  # change names
+  # update the cause name
+  change.tmp <- update_single_cause_name(pd, cn)
+
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_homicide_accident_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_mental_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  pd[, cause.name := gsub(' and', '\nand', cause.name)]
+  cn <- gsub(' and', '\nand', cn)
+
+  pd[, id := ifelse(id < 10, paste0('0',id), as.character(id))]
+
+  # set the col for label id
+  # pd[, col.id := ifelse(as.numeric(id)<=10, '#fcc5c0', '#54278f')]
+  setkey(pd, id)
+  pd[, id.lab := paste0(id, ': ', cause.name)]
+  col.in <- c(col.in[1:13], col.in[15:18], col.in[c(20, 23, 26, 28:30, 35)], rep('grey50', 27), 'grey70')
+
+  pd[as.numeric(id) <= 8, id.fontface := "bold"]
+  pd[as.numeric(id) > 8, id.fontface := "plain"]
+
+  # ALSO show the HIV (really small change rate in Black and Hispanic ppl)
+  pd[change.rate < 0.01, id.fontface := "bold"]
+
+  pd[as.numeric(id) > 8, id.size := 3]
+  pd <- pd[race.eth != 'Others']
+
+  pd[as.numeric(id) <= 8, id.size := 4]
+  pd[as.numeric(id) > 8, id.size := 2.5]
+  # Show hIV
+  pd[`2021` < 2 & change.rate >= - 0.01
+     & change.rate <= 2 & as.numeric(id) > 8
+     , id := '']
+
+  # pd[, sex := ifelse(sex == 'father', 'Men', 'Women')]
+  #
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c(
+                          "Non-Hispanic American Indian or Alaska Native",
+                          "Non-Hispanic Black" ,
+                          "Non-Hispanic White",
+                          "Hispanic" ,
+                          "Non-Hispanic Asian"
+
+                        ))
+
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  race.cat <- as.character(race.cat)
+  # pd1 <- pd[race.eth %in% race.cat[1:2]]
+  # pd1[, race.eth := as.character(race.eth)]
+
+  p.f <- ggplot(pd[sex == 'Father'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 16,  alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    scale_y_continuous(
+      limits = c(-0.03, 0.1),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.1),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 10),
+                          breaks = c(0, 0.5, 1, 2, 3, 8, 12, 20, 24),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "20%", "24%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Paternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution of orphanhood incidence rate in 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Father'],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=15, family='sans'),
+      legend.text=element_text(size=13, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    # to have the same x-axis ticks as those on the y-axis
+    # scale_y_continuous(limits =
+    #                      function(x){c(0, (max(x) * 1.1))}) +
+    scale_y_continuous(
+      limits = c(-0.03, 0.1),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.1),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 10),
+                          breaks = c(0, 0.5, 1, 2, 3, 8, 12, 20, 24),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "20%", "24%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Maternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution of orphanhood incidence rate in 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+      shape = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Mother'],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=15, family='sans'),
+      legend.text=element_text(size=13, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  return(list(p.f = p.f, p.m = p.m))
+}
+
+# fix the range of y as positive
+incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
+{
+  # whole US.
+  pd <- copy(dt.cum.all.age.in)
+  pd.rk <- pd[, ttl := sum(`2021`, na.rm = T),
+              by = 'cause.name']
+  pd.rk[, rank.value := -ttl]
+  setkey(pd.rk, rank.value)
+  pd.rk[, cause.name := gsub('\\*', '', cause.name)]
+  pd.cn <- unique(pd.rk$cause.name)
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('self-harm', pd.cn) | grepl('Other', pd.cn) | grepl('Accidents', pd.cn) | grepl('Assault', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+
+  tmp  <- merge(data.table(cn = cn, id = seq_len(length(cn))), pl.tab, by = 'cn', all.x = T)
+  setkey(tmp, id)
+  tmp[is.na(col.in), col.in := 'grey50']
+
+  # add the id of the cause
+  pd <- merge(pd, tmp, by.x = 'cause.name', by.y = 'cn', all.x = T)
+  setkey(pd, id)
+  col.in <- tmp$col.in
+  cn <- gsub('\\\n.*', '', tmp$cn)
+  cn <- gsub('\\*', '', cn)
+
+  pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
+  pd$cause.name <- gsub('\\*', '', pd$cause.name)
+  # change names
+  # update the cause name
+  change.tmp <- update_single_cause_name(pd, cn)
+
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_homicide_accident_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_mental_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  pd[, cause.name := gsub(' and', '\nand', cause.name)]
+  cn <- gsub(' and', '\nand', cn)
+
+  pd[, id := ifelse(id < 10, paste0('0',id), as.character(id))]
+
+  # set the col for label id
+  # pd[, col.id := ifelse(as.numeric(id)<=10, '#fcc5c0', '#54278f')]
+  setkey(pd, id)
+  pd[, id.lab := paste0(id, ': ', cause.name)]
+  col.in <- c(col.in[1:13], col.in[15:18], col.in[c(20, 23, 26, 28:30, 35)], rep('grey50', 33))
+
+  pd[as.numeric(id) <= 8, id.fontface := "bold"]
+  pd[as.numeric(id) > 8, id.fontface := "plain"]
+
+  # ALSO show the HIV (really small change rate in Black and Hispanic ppl)
+  pd[change.rate < 0.01, id.fontface := "bold"]
+  pd <- pd[race.eth != 'Others']
+
+  pd[as.numeric(id) <= 8, id.size := 4.5]
+  pd[as.numeric(id) > 8, id.size := 2.5]
+  # Show hIV
+
+  pd[`2021` < 2 & change.rate >= - 0.01
+     & change.rate <= 2 & as.numeric(id) > 8
+     , id := '']
+  # pd[`2021` < 0.003 & change.rate %in% -0.01:0.01 & as.numeric(id) > 8
+  #    , id := '']
+
+  # pd[, sex := ifelse(sex == 'father', 'Men', 'Women')]
+  #
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c(
+                          "Non-Hispanic American Indian or Alaska Native",
+                          "Non-Hispanic Black" ,
+                          "Non-Hispanic White",
+                          "Hispanic" ,
+                          "Non-Hispanic Asian"
+                        ))
+
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  race.cat <- as.character(race.cat)
+
+  # update the cause name: use two lines for the long cause names
+  unique(pd$cause.name)
+
+  p.f <- ggplot(pd[sex == 'Father'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 16,  alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    scale_y_continuous(
+      limits = c(0, 0.105),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(
+
+      breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.105),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 8),
+                          breaks = c(0, 0.5, 1, 2, 3, 8, 12, 16),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "16%")) +
+
+    # scale_size_continuous(range = c(1, 9),
+    #                       breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
+    #                       labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Paternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in paternal orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution to orphanhood incidence\nin 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 3),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Father' & id != ''],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=16, face = "bold", family='sans'),
+      legend.text=element_text(size=15, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    # to have the same x-axis ticks as those on the y-axis
+    # scale_y_continuous(limits =
+    #                      function(x){c(0, (max(x) * 1.1))}) +
+    scale_y_continuous(
+      limits = c(0, 0.105),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.105),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 8),
+                          breaks = c(0, 0.5, 1, 2, 3, 8, 12, 16),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "16%")) +
+
+    # scale_size_continuous(range = c(1, 9),
+    #                       breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
+    #                       labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Maternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in maternal orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      # size = 'Contribution to maternal orphanhood incidence in 2021 (%)') +
+    size = 'Contribution to orphanhood incidence\nin 2021 (%)') +
+
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 3),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+      # shape = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Mother'& id != ''],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=16, face = "bold", family='sans'),
+      legend.text=element_text(size=15, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  return(list(p.f = p.f, p.m = p.m))
+}
+
+# by sex
+incidence_rate_change_rate_bubble_each_sex_part_race_children_by_cause_y_posi <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
+{
+  # whole US.
+  pd <- copy(dt.cum.all.age.in)
+  pd.rk <- pd[, ttl := sum(`2021`, na.rm = T),
+              by = 'cause.name']
+  pd.rk[, rank.value := -ttl]
+  setkey(pd.rk, rank.value)
+  pd.rk[, cause.name := gsub('\\*', '', cause.name)]
+  pd.cn <- unique(pd.rk$cause.name)
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('self-harm', pd.cn) | grepl('Other', pd.cn) | grepl('Accidents', pd.cn) | grepl('Assault', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+
+  tmp  <- merge(data.table(cn = cn, id = seq_len(length(cn))), pl.tab, by = 'cn', all.x = T)
+  setkey(tmp, id)
+  tmp[is.na(col.in), col.in := 'grey50']
+
+  # add the id of the cause
+  pd <- merge(pd, tmp, by.x = 'cause.name', by.y = 'cn', all.x = T)
+  setkey(pd, id)
+  col.in <- tmp$col.in
+  cn <- gsub('\\\n.*', '', tmp$cn)
+  cn <- gsub('\\*', '', cn)
+
+  pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
+  pd$cause.name <- gsub('\\*', '', pd$cause.name)
+  # change names
+  # update the cause name
+  change.tmp <- update_single_cause_name(pd, cn)
+
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_homicide_accident_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_mental_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  pd[, cause.name := gsub(' and', '\nand', cause.name)]
+  cn <- gsub(' and', '\nand', cn)
+
+  pd[, id := ifelse(id < 10, paste0('0',id), as.character(id))]
+
+  # set the col for label id
+  # pd[, col.id := ifelse(as.numeric(id)<=10, '#fcc5c0', '#54278f')]
+  setkey(pd, id)
+  pd[, id.lab := paste0(id, ': ', cause.name)]
+  col.in <- c(col.in[1:13], col.in[15:18], col.in[c(20, 23, 26, 28:30, 35)], rep('grey50', 33))
+
+  pd[as.numeric(id) <= 8, id.fontface := "bold"]
+  pd[as.numeric(id) > 8, id.fontface := "plain"]
+
+  # ALSO show the HIV (really small change rate in Black and Hispanic ppl)
+  pd[change.rate < 0.01, id.fontface := "bold"]
+  pd <- pd[race.eth != 'Others']
+
+  pd[as.numeric(id) <= 8, id.size := 4.5]
+  pd[as.numeric(id) > 8, id.size := 2.5]
+  # Show hIV
+
+  pd[`2021` < 2 & change.rate >= - 0.01
+     & change.rate <= 2 & as.numeric(id) > 8
+     , id := '']
+  # pd[`2021` < 0.003 & change.rate %in% -0.01:0.01 & as.numeric(id) > 8
+  #    , id := '']
+
+  # pd[, sex := ifelse(sex == 'father', 'Men', 'Women')]
+  #
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c(
+                          "Non-Hispanic American Indian or Alaska Native",
+                          "Non-Hispanic Black" ,
+                          "Non-Hispanic White",
+                          "Hispanic" ,
+                          "Non-Hispanic Asian"
+                        ))
+
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  race.cat <- as.character(race.cat)
+
+  # update the cause name: use two lines for the long cause names
+  unique(pd$cause.name)
+
+  p.f <- ggplot(pd[sex == 'Father'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 16,  alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    scale_y_continuous(
+      limits = c(0, 0.105),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(
+
+      breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+      limits = c(-0.03, 0.105),
+      labels = scales::comma
+    ) +
+    # scale_size_continuous(range = c(2, 10),
+    #                       breaks = c(0, 0.5, 1, 2, 3, 8, 12, 20, 24),
+    #                       labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "20%", "24%")) +
+
+    scale_size_continuous(range = c(1, 9),
+                          breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
+                          labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Paternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution to paternal orphanhood incidence in 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Father' & id != ''],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=16, face = "bold", family='sans'),
+      legend.text=element_text(size=15, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    # to have the same x-axis ticks as those on the y-axis
+    # scale_y_continuous(limits =
+    #                      function(x){c(0, (max(x) * 1.1))}) +
+    scale_y_continuous(
+      limits = c(0, 0.105),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.105),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(1, 9),
+                          breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
+                          labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Maternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution to maternal orphanhood incidence in 2021 (%)') +
+      # size = 'Contribution to orphanhood incidence in 2021 (%)') +
+
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+      # shape = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Mother'& id != ''],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=16, face = "bold", family='sans'),
+      legend.text=element_text(size=15, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  return(list(p.f = p.f, p.m = p.m))
+}
+# Alternative figure (Susan and Andres asked for different size of dots and x/y ranges in different plot)
+incidence_rate_change_rate_bubble_each_sex_part_race_children_by_cause_diff_size <- function(pl.tab, par, dt.cum.all.age.in, prj.dir, title.input, type.input)
+{
+  if (grepl('cg_loss', par))
+  {
+    tp.title <- "children experiencing\ncaregiver death"
+    contrib.name <- "caregiver"
+  }
+
+  if (grepl('parent', par))
+  {
+    tp.title <- "children experiencing\nparental death"
+    contrib.name <- "parental"
+  }
+  if (grepl('grandparent', par))
+  {
+    tp.title <- "children experiencing\ngrandparental death"
+    contrib.name <- "grandparental"
+  }
+  if (grepl('all-type-loss', par))
+  {
+    tp.title <- "children's\ncg loss"
+  }
+  if (grepl('incid', par))
+  {
+    if (grepl('rate', par))
+    {
+      row.title <- paste0('Rate of children newly experiencing\n', contrib.name, ' death per 100 children')
+    }else{
+      row.title <- paste0('Number of children newly experiencing\n', contrib.name, ' death per year')
+    }
+  }
+  if (grepl('prev', par))
+  {
+    row.title <- paste0('Cumulative burden of\n', contrib.name, " death")
+    # lab.name <- paste0('Causes or combination of causes of children\nexperiencing ', contrib.name, ' death')
+  }
+  # whole US.
+  pd <- copy(dt.cum.all.age.in)
+  pd.rk <- pd[, ttl := sum(`2021`, na.rm = T),
+              by = 'cause.name']
+  pd.rk[, rank.value := -ttl]
+  setkey(pd.rk, rank.value)
+  pd.rk[, cause.name := gsub('\\*', '', cause.name)]
+  pd.cn <- unique(pd.rk$cause.name)
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('self-harm', pd.cn) | grepl('Other', pd.cn) | grepl('Accidents', pd.cn) | grepl('Assault', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+
+  tmp  <- merge(data.table(cn = cn, id = seq_len(length(cn))), pl.tab, by = 'cn', all.x = T)
+  setkey(tmp, id)
+  tmp[is.na(col.in), col.in := 'grey50']
+
+  # add the id of the cause
+  pd <- merge(pd, tmp, by.x = 'cause.name', by.y = 'cn', all.x = T)
+  setkey(pd, id)
+  col.in <- tmp$col.in
+  cn <- gsub('\\\n.*', '', tmp$cn)
+  cn <- gsub('\\*', '', cn)
+
+  pd$cause.name <- gsub('\\\n.*', '', pd$cause.name)
+  pd$cause.name <- gsub('\\*', '', pd$cause.name)
+  # change names
+  # update the cause name
+  change.tmp <- update_single_cause_name(pd, cn)
+
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_homicide_accident_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_mental_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  pd[, cause.name := gsub(' and', '\nand', cause.name)]
+  cn <- gsub(' and', '\nand', cn)
+
+  pd[, id := ifelse(id < 10, paste0('0',id), as.character(id))]
+
+  # set the col for label id
+  # pd[, col.id := ifelse(as.numeric(id)<=10, '#fcc5c0', '#54278f')]
+  setkey(pd, id)
+  pd[, id.lab := paste0(id, ': ', cause.name)]
+  col.in <- c(col.in[1:13], col.in[15:18], col.in[c(20, 23, 26, 28:30, 35)], rep('grey50', 27), 'grey70')
+  # pd[, rank.name := seq_len(nrow(pd))]
+  # pd[, cause.name := factor(cause.name, levels = cn)]
+  # pd[, cause.label := paste0(rank.name, ': ', cause.name)]
+
+  pd[as.numeric(id) <= 8, id.fontface := "bold"]
+  pd[as.numeric(id) > 8, id.fontface := "plain"]
+  # ALSO show the HIV (really small change rate in Black and Hispanic ppl)
+  pd[change.rate < 0.01, id.fontface := "bold"]
+
+  pd[as.numeric(id) > 8, id.size := 3]
+  pd <- pd[race.eth != 'Others']
+
+  pd[as.numeric(id) <= 8, id.size := 4]
+  pd[as.numeric(id) > 8, id.size := 2.5]
+  pd[`2021` < 2 & change.rate >= -0.01
+     & change.rate <= 2 & as.numeric(id) > 8
+     , id := '']
+
+  # pd[, sex := ifelse(sex == 'father', 'Men', 'Women')]
+  #
+  pd$race.eth <- factor(pd$race.eth,
+                        levels = c(
+                          "Non-Hispanic American Indian or Alaska Native",
+                          "Non-Hispanic Black" ,
+                          "Non-Hispanic White",
+                          "Hispanic" ,
+                          "Non-Hispanic Asian"
+
+                        ))
+
+  setkey(pd, race.eth)
+  race.cat <- unique(pd$race.eth)
+  race.cat <- as.character(race.cat)
+
+  # check the range
+  pd[sex == 'Father', summary(change.rate)]
+  pd[sex != 'Father', summary(change.rate)]
+
+  p.f <- ggplot(pd[sex == 'Father'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 16,  alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    scale_y_continuous(
+      limits = c(0, 0.1),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.03, 0, 0.02, 0.04, 0.06, 0.08, 0.1),
+                       limits = c(-0.03, 0.1),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 8),
+                          breaks = c(0, 0.5, 1, 2, 3, 8, 12),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Paternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution of orphanhood incidence rate in 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Father'],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=15, family='sans'),
+      legend.text=element_text(size=13, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
+    geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
+    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    scale_colour_manual(values = c(col.in)) +
+    # to have the same x-axis ticks as those on the y-axis
+    # scale_y_continuous(limits =
+    #                      function(x){c(0, (max(x) * 1.1))}) +
+    scale_y_continuous(
+      limits = c(0, 0.1),
+      # expand = expansion(mult = c(0, 0.01)),
+      breaks = c(0, 0, 0.02, 0.04, 0.06, 0.08, 0.1)
+    ) +
+    scale_x_continuous(breaks = c(-0.025, 0, 0.02, 0.04, 0.06, 0.075),
+                       limits = c(-0.025, 0.075),
+                       labels = scales::comma
+    ) +
+    scale_size_continuous(range = c(2, 8),
+                          breaks = c(0, 0.5, 1, 2, 3, 5, 8),
+                          labels = c("0%", "0.5%", "1%", "2%", "3%", "5%",  "8%")) +
+    facet_wrap(factor(race.eth, levels = (race.cat))~.,
+               # scales = 'free_x',
+               ncol = 3, nrow = 2
+    ) +
+    theme_bw() +
+    ylab('Maternal orphanhood incidence rate per 100 children in 2021') +
+    xlab('Difference in orphanhood incidence rates per 100 children in 2021 versus those in 2000') +
+    labs(
+      col = 'Cause',
+      size = 'Contribution of orphanhood incidence rate in 2021 (%)') +
+    guides(
+      col = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 4),
+      # col = 'none',
+      size = guide_legend(title.position="top", title.hjust = 0.5, ncol = 1),
+      shape = guide_legend(override.aes = list(size = 3), title.position="top", title.hjust = 0.5, ncol = 1)
+
+    ) +
+    ggrepel::geom_text_repel(data = pd[sex == 'Mother'],
+                             aes(label = id,
+                                 size = id.size
+                                 , fontface = id.fontface
+                             ),
+                             max.overlaps = Inf,
+                             col = 'black',
+                             show.legend = FALSE
+    ) +
+    theme(
+      legend.position = "bottom",
+      legend.box = "horizontal",
+      axis.title = element_text(size = 16),
+      axis.text = element_text(size=13, family='sans'),
+      text=element_text(size=16,family='sans'),
+      legend.title=element_text(size=15, family='sans'),
+      legend.text=element_text(size=13, family='sans'),
+      legend.key.size = unit(16, 'pt'),
+      strip.text = element_text(size = 16),
+      panel.background = element_blank(),
+      strip.background = element_blank()
+    )
+
+  return(list(p.f = p.f, p.m = p.m))
 }
 
 # 0712 contribution to incidence number regardless of race eth
@@ -7410,6 +9225,275 @@ prevalence_summary_orphanhood_bar <- function(dt.prev.orphans.age, dt.prev.orpha
   return(pe)
 }
 
+# 240510
+prevalence_summary_orphanhood_bar_col_update <- function(dt.prev.orphans.age, dt.prev.orphans.race)
+{
+  dt.prev.orphans.age <- dt.prev.orphans.age[year == 2021]
+  dt.prev.orphans.race <- dt.prev.orphans.race[year == 2021]
+
+  dt.prev.all <- dt.prev.orphans.age[loss.type == 'orphans', list(value = sum(value * pop / 100, na.rm = T)),
+                                     by = c('state', 'year', 'race.eth', 'stat')]
+  tmp <- unique(dt.prev.orphans.age[, list(year,age.group,race.eth,pop)])
+  dt.prev.all[, pop := sum(tmp$pop)]
+  dt.prev.all[, value := value/pop * 1e5]
+  dt.prev.all[, value := value/10/100]
+
+  dt.prev.orphans.age <- dt.prev.orphans.age[loss.type == 'orphans', list(value = sum(value, na.rm = T)),
+                                             by = c('age.group', 'state', 'year', 'race.eth', 'stat')]
+  dt.prev.orphans.race <- dt.prev.orphans.race[loss.type == 'orphans', list(value = sum(value, na.rm = T)),
+                                               by = c( 'state', 'year', 'race.eth', 'stat')]
+
+  dt.prev.all[, variable := 'Total']
+  setnames(dt.prev.orphans.age, 'age.group', 'variable')
+  setnames(dt.prev.orphans.race, 'race.eth', 'variable')
+
+  # setting colors
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", 'grey70')# "#D3D3D3")
+  col.age <- c('#85dfeae5', '#1cc3d8e5', '#009eb0e5')
+
+
+  col.race <- c('#F44336', '#E91E63', "#9C27B0", '#3F51B5', "#2196F3")
+  col.race <- c('#FF9800',  "#2196F3", '#F44336','#4CAF50', "#AFB42B")
+  col.race <- c('#FF9800',  '#F44336','#4CAF50',  "#2196F3", "#AFB42B")
+  col.race <- c('#F44336', '#E91E63', "#F9A825", '#3F51B5', "#2196F3")
+  col.race <- c('#2196F3', '#F9A825', "#3F51B5", '#E91E63', "#F44336")
+  col.race <- c('#2196F3', '#FF5722', "#3F51B5", '#FF9800', "#FFEB3B")
+
+  col.race <- c('#2196F3', '#FF5722', "#3F51B5", '#FF9800', "#FBC02D")
+  col.race <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+
+
+  col.age <- c('#85dfeae5', '#1cc3d8e5', '#009eb0e5')
+  col.age <- c('#B39DDB', '#5E35B1', '#311B92')
+
+  setkey(dt.prev.orphans.age, variable)
+  dt.col.age <- data.table(col.age = col.age, variable = unique(dt.prev.orphans.age$variable))
+  dt.prev.orphans.age <- merge(dt.prev.orphans.age, dt.col.age, by = 'variable', all.x = T)
+  dt.prev.orphans.age[, rnk := -value]
+  setkey(dt.prev.orphans.age, rnk, stat)
+  dt.prev.orphans.age[, variable := factor(variable, unique(dt.prev.orphans.age$variable))]
+
+  #
+  setkey(dt.prev.orphans.race, variable)
+  dt.prev.orphans.race <- dt.prev.orphans.race[variable != 'Others']
+  dt.col.race <- data.table(col.race = col.race, variable = unique(dt.prev.orphans.race$variable))
+  dt.prev.orphans.race <- merge(dt.prev.orphans.race, dt.col.race, by = 'variable', all.x = T)
+  dt.prev.orphans.race[, rnk := -value]
+  setkey(dt.prev.orphans.race, rnk, stat)
+  dt.prev.orphans.race[, variable := factor(variable, unique(dt.prev.orphans.race$variable))]
+
+  #
+  col.all <- c(
+    unique(dt.prev.orphans.race$col.race),
+    unique(dt.prev.orphans.age$col.age),
+    '#4E342E')
+
+  # combine estimates
+  tmp <- rbind(
+    dt.prev.orphans.race[, grp := 'by standardized\nrace & ethnicity'],
+    dt.prev.orphans.age[, grp := 'by age'],
+    dt.prev.all[, grp := 'All causes'], use.names = T, fill = T)
+  tmp <- tmp[!is.na(stat)]
+
+  unique(tmp$variable)
+
+  tmp[grepl('or', variable), variable := gsub(' or', '\nor', variable)]
+  pe <- ggplot(tmp[stat == 'M' & variable != 'Others'],
+               aes(x = factor(grp, levels = rev(unique(tmp$grp))), y = value, fill = factor(variable, levels = rev(unique(tmp$variable))))) +
+    geom_bar(stat = 'identity', position = position_dodge2(width = 1, preserve = "single"), alpha = 0.75) +
+    scale_fill_manual(values = rev(col.all), drop = T) +
+    facet_grid(.~paste0('')) +
+    geom_text(
+      aes(label = format(value, digits = 1, nsmall = 1)),
+      position = position_dodge2(1, preserve = "single"),
+      vjust = -.5,
+      size = 4,
+      col = 'black', fontface = 'bold'
+    ) +
+
+    # geom_text(
+    #   aes(x = grp, y = .5, label = variable),
+    #   position = position_dodge2(1, preserve = "single"),
+    #   # hjust = 1.5,
+    #   size = 4.6,
+    #   col = 'black'
+    #   # angle = 90
+    #
+    # ) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.1))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    xlab('') +
+    ylab("Orphanhood prevalence rate\nper 100 children in 2021") +
+    # coord_flip() +
+    labs(fill = ''
+    ) +
+    guides(fill = guide_legend(ncol = 1
+                               # reverse=TRUE
+    )) +
+    theme(legend.position = 'right',
+          panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+          panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+
+          panel.border = element_rect(fill = NA, linewidth = 0.3),
+          axis.line = element_line(linewidth = 0.2, colour = "black"),
+
+          # axis.ticks = element_line(size = 0.2),
+          # panel.border = element_rect(colour = "black", fill=NA, size=5),
+
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+
+    )
+  return(pe)
+}
+
+# 240514 after meeting
+prevalence_summary_orphanhood_bar_all_col_update <- function(dt.prev.orphans.sex.save, dt.prev.orphans.age.save, dt.prev.orphans.race.save)
+{
+  dt.prev.orphans.age <- dt.prev.orphans.age.save[year == 2021]
+  dt.prev.orphans.race <- dt.prev.orphans.race.save[year == 2021]
+  dt.prev.orphans.sex <- dt.prev.orphans.sex.save[year == 2021]
+
+  dt.prev.all <- dt.prev.orphans.age[loss.type == 'orphans', list(value = sum(value * pop / 100, na.rm = T)),
+                                     by = c('state', 'year', 'race.eth', 'stat')]
+  tmp <- unique(dt.prev.orphans.age[, list(year,age.group,race.eth,pop)])
+  dt.prev.all[, pop := sum(tmp$pop)]
+  dt.prev.all[, value := value/pop * 1e5]
+  dt.prev.all[, value := value/10/100]
+
+  dt.prev.orphans.age <- dt.prev.orphans.age[loss.type == 'orphans', list(value = sum(value, na.rm = T)),
+                                             by = c('age.group', 'state', 'year', 'race.eth', 'stat')]
+  dt.prev.orphans.race <- dt.prev.orphans.race[loss.type == 'orphans', list(value = sum(value, na.rm = T)),
+                                               by = c( 'state', 'year', 'race.eth', 'stat')]
+  dt.prev.all[, variable := 'Total']
+  dt.prev.orphans.sex[, loss.type := ifelse(loss.type == 'father', 'Father', 'Mother')]
+  setnames(dt.prev.orphans.age, 'age.group', 'variable')
+  setnames(dt.prev.orphans.race, 'race.eth', 'variable')
+  setnames(dt.prev.orphans.sex, 'loss.type', 'variable')
+
+  # setting colors
+  # previous
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", 'grey70')# "#D3D3D3")
+  col.age <- c('#85dfeae5', '#1cc3d8e5', '#009eb0e5')
+
+  # new
+  col.race <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+  col.age <- c('#B39DDB', '#5E35B1', '#311B92')
+  col.sex <- c('#41b6c4', '#f768a1')
+
+  setkey(dt.prev.orphans.age, variable)
+  dt.col.age <- data.table(col.age = col.age, variable = unique(dt.prev.orphans.age$variable))
+  dt.prev.orphans.age <- merge(dt.prev.orphans.age, dt.col.age, by = 'variable', all.x = T)
+  dt.prev.orphans.age[, rnk := -value]
+  setkey(dt.prev.orphans.age, rnk, stat)
+  dt.prev.orphans.age[, variable := factor(variable, unique(dt.prev.orphans.age$variable))]
+
+  #
+  setkey(dt.prev.orphans.race, variable)
+  dt.prev.orphans.race <- dt.prev.orphans.race[variable != 'Others']
+  dt.col.race <- data.table(col.race = col.race, variable = unique(dt.prev.orphans.race$variable))
+  dt.prev.orphans.race <- merge(dt.prev.orphans.race, dt.col.race, by = 'variable', all.x = T)
+  dt.prev.orphans.race[, rnk := -value]
+  setkey(dt.prev.orphans.race, rnk, stat)
+  dt.prev.orphans.race[, variable := factor(variable, unique(dt.prev.orphans.race$variable))]
+
+  #
+  var.sex <- c('Father', 'Mother')
+  setkey(dt.prev.orphans.sex, variable)
+  dt.col.sex <- data.table(col.sex = col.sex, variable = var.sex)
+  dt.prev.orphans.sex <- merge(dt.prev.orphans.sex, dt.col.sex, by = 'variable', all.x = T)
+  dt.prev.orphans.sex[, rnk := -value]
+  setkey(dt.prev.orphans.sex, rnk, stat)
+  dt.prev.orphans.sex[, variable := factor(variable, var.sex)]
+
+  #
+  col.all <- c(
+    unique(dt.prev.orphans.race$col.race),
+    unique(dt.prev.orphans.age$col.age),
+    unique(dt.prev.orphans.sex$col.sex),
+    '#4E342E')
+
+  # combine estimates
+  tmp <- rbind(
+    dt.prev.orphans.race[, grp := 'by standardized\nrace & ethnicity'],
+    dt.prev.orphans.age[, grp := 'by age'],
+    dt.prev.orphans.sex[, grp := 'by sex\nof parents'],
+
+    dt.prev.all[, grp := 'All causes'], use.names = T, fill = T)
+  tmp <- tmp[!is.na(stat)]
+
+  unique(tmp$variable)
+
+  tmp[grepl('or', variable), variable := gsub(' or', '\nor', variable)]
+  tmp <- tmp[variable != 'Others']
+  set(tmp, NULL, c('race.eth', 'col.race', 'col.age', 'population', 'col.sex', 'pop'), NULL)
+  tmp.plt <- as.data.table(reshape2::dcast(tmp, variable+state+year+grp~stat, value.var = 'value'))
+  pe <- ggplot(tmp.plt,
+               aes(x = factor(grp, levels = (unique(tmp$grp))), y = M , ymin = CL, ymax = CU, fill = factor(variable, levels = (unique(tmp$variable))))) +
+
+
+    geom_bar(stat = 'identity', position = position_dodge2(width = 1, preserve = "single"),
+             colour="black", linewidth = .3, alpha = 0.75)+
+    scale_fill_manual(values = (col.all), drop = T) +
+    facet_grid(.~paste0('')) +
+    geom_text(
+      aes(label = format(M, digits = 1, nsmall = 1)),
+      position = position_dodge2(1, preserve = "single"),
+      # vjust = -.5,
+      hjust = -.5,
+      size = 4,
+      col = 'black', fontface = 'bold'
+    ) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.2))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    xlab('') +
+    ylab("Orphanhood prevalence rate\nper 100 children in 2021") +
+    coord_flip() +
+    labs(fill = ''
+    ) +
+    guides(fill = guide_legend(ncol = 1,
+                               reverse=TRUE
+    )) +
+    theme(legend.position = 'right',
+          panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+          panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+          panel.border = element_rect(fill = NA, linewidth = 0.3),
+          axis.line = element_line(linewidth = 0.2, colour = "black"),
+
+          # axis.ticks = element_line(size = 0.2),
+          # panel.border = element_rect(colour = "black", fill=NA, size=5),
+
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          axis.title.y = element_blank(),
+
+          axis.title.y.left = element_text(size = 16),
+          # axis.text.y.right = element_text(size=13, family='sans'),
+
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+
+    )
+  return(pe)
+}
 # State by race ----
 prevalence_summary_state_race_orphanhood_bar <- function(tmp)
 {
@@ -7494,7 +9578,7 @@ prevalence_summary_state_race_orphanhood_bar <- function(tmp)
 
 # Supp Fig3
 # new 1028
-prevalence_summary_orphanhood_bar_race_age <- function(dt.prev.orphans.race)
+prevalence_summary_orphanhood_bar_race_age <- function(dt.cum.all.age)
 {
   dt.prev.orphans.age <- copy(dt.cum.all.age)
 
@@ -7601,6 +9685,276 @@ prevalence_summary_orphanhood_bar_race_age <- function(dt.prev.orphans.race)
   return(pe)
 }
 
+# review:
+# 0510
+prevalence_summary_orphanhood_bar_race_age_col_update_old <- function(dt.cum.all.age)
+{
+  dt.prev.orphans.age <- copy(dt.cum.all.age)
+
+  dt.prev.all <- dt.prev.orphans.age[, list(value = sum(value, na.rm = T)),
+                                     by = c('state', 'year', 'age.group', 'race.eth')]
+
+
+  # setting colors
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "#D3D3D3" )
+  # cols for mortality
+  col.cause <- c(
+    '#800000FF', # covid
+    '#2d6d66',   # drug
+    '#4cb6ace5', # accidents
+    '#1565c0',  # suicide
+    '#2196f3',  # homicide
+    '#925E9FFF', # Diseases of heart
+    '#e08214',   # Malignant neoplasms
+    '#283593', # cerebrovas
+    '#B24745FF', # chronic lower changed from alz disease
+    'grey70'
+   )
+
+  col.race <- c('#E91E63', '#64DD17', "#FDD835", '#6200EA', "#3E2723")
+
+
+  col.race <- c('#F44336', '#E91E63', "#9C27B0", '#3F51B5', "#2196F3")
+  col.age <- c('#85dfeae5', '#1cc3d8e5', '#009eb0e5')
+
+  col.age <- c('#6200EA', '#7C4DFF', '#B388FF')
+  col.age <- c('#AA00FF','#E040FB', '#EA80FC')
+  col.age <- c('#311B92', '#5E35B1', '#B39DDB')
+
+  #
+  # col.age <- c('#311B92', '#673AB7', '#B39DDB')
+  #
+  # '#6200EA', '#B71C1C','#F44336'
+  #
+  #   900:
+  # '#B71C1C', '#880E4F', '#4A148C', '#283593', '#0D47A1', '#01579B',
+  #   '#006064', '#1B5E20', '#827717',
+  # '#004D40','#00796B', '#F57F17', '#FF6F00', '#E65100',
+  #   '#3E2723', '#212121', '#424242', '#37474F', '#BF360C',
+  #
+  # 700:
+  #     '#FBC02D'
+
+  dt.prev.all[grepl(' or', race.eth), race.eth := gsub(' or', '\nor', race.eth)]
+  dt.prev.all[grepl('-Hispanic ', race.eth), race.eth := gsub('-Hispanic ', '-Hispanic\n', race.eth)]
+
+  setkey(dt.prev.all, race.eth)
+
+  pe <- ggplot(dt.prev.all[race.eth != 'Others'],
+               aes(x = factor(race.eth, levels = (unique(dt.prev.all$race.eth))),
+                   y = value, fill = race.eth
+               )) +
+    geom_bar(stat = 'identity', position = position_dodge2(width = 1, preserve = "single"), alpha = 0.75) +
+    scale_fill_manual(values = (col.race), drop = T) +
+    facet_grid(.~factor(age.group, levels = unique(dt.prev.all$age.group)),
+               scales = 'free') +
+    geom_text(
+      aes(label = format(value, digits = 1, nsmall = 1)),
+      position = position_dodge2(1, preserve = "single"),
+      vjust = -1,
+      size = 4,
+      col = 'black', fontface = 'bold'
+    ) +
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.1))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children in 2021") +
+    # coord_flip() +
+    labs(fill = 'Standardized race & ethnicity'
+    ) +
+    guides(fill = guide_legend(nrow = 2
+    )) +
+    theme(legend.position = 'none',
+          panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+          panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+
+          panel.border = element_rect(fill = NA, linewidth = 0.3),
+          axis.line = element_line(linewidth = 0.2, colour = "black"),
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+
+    )
+  # pe <- ggplot(dt.prev.all[race.eth != 'Others'],
+  #              aes(x = factor(race.eth, levels = rev(unique(dt.prev.all$race.eth))),
+  #                  y = value, fill = race.eth
+  #              )) +
+  #   geom_bar(stat = 'identity', position = position_dodge2(width = 1, preserve = "single"), alpha = 0.75) +
+  #   scale_fill_manual(values = (col.race), drop = T) +
+  #   facet_grid(.~factor(age.group, levels = unique(dt.prev.all$age.group)),
+  #              scales = 'free') +
+  #   geom_text(
+  #     aes(label = format(value, digits = 1, nsmall = 1)),
+  #     position = position_dodge2(1, preserve = "single"),
+  #     vjust = -1,
+  #     size = 4,
+  #     col = 'black', fontface = 'bold'
+  #   ) +
+  #   scale_y_continuous(limits =
+  #                        function(x){c(0, (max(x) * 1.1))},
+  #                      labels = scales::comma,
+  #                      expand = expansion(mult = c(0, 0.01))) +
+  #   xlab('') +
+  #   ylab("Orphanhood prevalence rate per 100 children in 2021") +
+  #   coord_flip() +
+  #   labs(fill = 'Standardized race & ethnicity'
+  #   ) +
+  #   guides(fill = guide_legend(nrow = 2
+  #   )) +
+  #   theme(legend.position = 'none',
+  #         panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+  #         panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+  #
+  #         panel.border = element_rect(fill = NA, linewidth = 0.3),
+  #         axis.line = element_line(linewidth = 0.2, colour = "black"),
+  #         axis.title = element_text(size = 16),
+  #         axis.text = element_text(size=13, family='sans'),
+  #         text=element_text(size=16,family='sans'),
+  #         legend.title=element_text(size=15, family='sans'),
+  #         legend.text=element_text(size=13, family='sans'),
+  #         legend.key.size = unit(16, 'pt'),
+  #         strip.text = element_text(size = 16),
+  #         # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+  #         panel.background = element_blank(),
+  #         strip.background = element_blank()
+  #
+  #   )
+  return(pe)
+}
+
+prevalence_summary_orphanhood_bar_race_age_col_update <- function(dt.cum.all.age.race)
+{
+  dt.prev.all <- copy(dt.cum.all.age.race)
+  # dt.prev.all <- dt.prev.orphans.age[, list(value = sum(value, na.rm = T)),
+  #                                    by = c('state', 'year', 'age.group', 'race.eth')]
+
+
+  # setting colors
+  col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "#D3D3D3" )
+
+  col.race.age1 <- c('#1565C0', '#BF360C', "#1A237E", '#E65100', "#FBC02D")
+  col.race.age2 <- c('#2196F3', '#FF7043', "#5C6BC0", '#FF9800', "#FFEB3B")
+  col.race.age3 <- c('#90CAF9', '#FFAB91', "#9FA8DA", '#FFCC80', "#FFF59D")
+  col.race.age <- c(col.race.age3, col.race.age2, col.race.age1)
+  col.race <- c('#2196F3', '#BF360C', "#3F51B5", '#EF6C00', "#FBC02D")
+
+
+  dt.prev.all[grepl(' or', race.eth), race.eth := gsub(' or', '\nor', race.eth)]
+  dt.prev.all[grepl('-Hispanic ', race.eth), race.eth := gsub('-Hispanic ', '-Hispanic\n', race.eth)]
+
+  setkey(dt.prev.all, race.eth)
+
+  setkey(dt.prev.all, age.group, race.eth)
+
+
+  dt.prev.all[, age.group := paste0(age.group, '\n')]
+
+  pe <- ggplot(dt.prev.all[race.eth != 'Others'],
+               aes(x = factor(race.eth, levels = (unique(dt.prev.all$race.eth))),
+                   y = value, fill = race.eth
+               )) +
+    geom_col(colour="black", linewidth = .3, alpha = 0.75)+
+    geom_errorbar(aes(ymin = cl, ymax = cu), colour="black", alpha = 0.9, width = .5,
+                  linewidth = 0.5)+
+
+    # geom_bar(stat = 'identity', colour="black",
+    #          position = position_dodge2(width = 1, preserve = "single"), alpha = 0.9) +
+    scale_fill_manual(values = (col.race), drop = T) +
+    facet_grid(.~factor(age.group, levels = unique(dt.prev.all$age.group)),
+               scales = 'free') +
+    geom_text(
+      aes(label = format(value, digits = 1, nsmall = 1)),
+      position = position_dodge2(1, preserve = "single"),
+      vjust = -.8,
+      # hjust = 1.2,
+      size = 4,
+      col = 'black', fontface = 'bold'
+    ) +
+
+    scale_y_continuous(limits =
+                         function(x){c(0, (max(x) * 1.1))},
+                       labels = scales::comma,
+                       expand = expansion(mult = c(0, 0.01))) +
+    xlab('') +
+    ylab("Orphanhood prevalence rate per 100 children in 2021") +
+    # coord_flip() +
+    labs(fill = 'Standardized race & ethnicity'
+    ) +
+    guides(fill = guide_legend(nrow = 2
+    )) +
+    theme(legend.position = 'none',
+          panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+          panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+
+          panel.border = element_rect(fill = NA, linewidth = 0.3),
+          axis.line = element_line(linewidth = 0.2, colour = "black"),
+          axis.title = element_text(size = 16),
+          axis.text = element_text(size=13, family='sans'),
+          text=element_text(size=16,family='sans'),
+          legend.title=element_text(size=15, family='sans'),
+          legend.text=element_text(size=13, family='sans'),
+          legend.key.size = unit(16, 'pt'),
+          strip.text = element_text(size = 16),
+          axis.text.x = element_blank(),
+          panel.background = element_blank(),
+          strip.background = element_blank()
+
+    )
+  # pe <- ggplot(dt.prev.all[race.eth != 'Others'],
+  #              aes(x = factor(race.eth, levels = rev(unique(dt.prev.all$race.eth))),
+  #                  y = value, fill = race.eth
+  #              )) +
+  #   geom_bar(stat = 'identity', position = position_dodge2(width = 1, preserve = "single"), alpha = 0.75) +
+  #   scale_fill_manual(values = (col.race), drop = T) +
+  #   facet_grid(.~factor(age.group, levels = unique(dt.prev.all$age.group)),
+  #              scales = 'free') +
+  #   geom_text(
+  #     aes(label = format(value, digits = 1, nsmall = 1)),
+  #     position = position_dodge2(1, preserve = "single"),
+  #     vjust = -1,
+  #     size = 4,
+  #     col = 'black', fontface = 'bold'
+  #   ) +
+  #   scale_y_continuous(limits =
+  #                        function(x){c(0, (max(x) * 1.1))},
+  #                      labels = scales::comma,
+  #                      expand = expansion(mult = c(0, 0.01))) +
+  #   xlab('') +
+  #   ylab("Orphanhood prevalence rate per 100 children in 2021") +
+  #   coord_flip() +
+  #   labs(fill = 'Standardized race & ethnicity'
+  #   ) +
+  #   guides(fill = guide_legend(nrow = 2
+  #   )) +
+  #   theme(legend.position = 'none',
+  #         panel.grid.major = element_line(linewidth = 0.5, colour = 'grey90'),
+  #         panel.grid.minor = element_line(linewidth = 0.3, colour = 'grey90'),
+  #
+  #         panel.border = element_rect(fill = NA, linewidth = 0.3),
+  #         axis.line = element_line(linewidth = 0.2, colour = "black"),
+  #         axis.title = element_text(size = 16),
+  #         axis.text = element_text(size=13, family='sans'),
+  #         text=element_text(size=16,family='sans'),
+  #         legend.title=element_text(size=15, family='sans'),
+  #         legend.text=element_text(size=13, family='sans'),
+  #         legend.key.size = unit(16, 'pt'),
+  #         strip.text = element_text(size = 16),
+  #         # axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+  #         panel.background = element_blank(),
+  #         strip.background = element_blank()
+  #
+  #   )
+  return(pe)
+}
 prevalence_summary_orphanhood_bar_race_in_age_bars <- function(dt.prev.orphans.race)
 {
   dt.prev.orphans.age <- copy(dt.cum.all.age)
@@ -11251,22 +13605,6 @@ plot_ranking_incidence_prevalence_us_state <- function(show.nb, pl.tab, par, dt,
                linetype = 'dashed', colour = 'steel blue') +
     scale_fill_manual(values = alpha(rev(col.in), 0.7)
     ) +
-    # geom_text(data = pd,
-    #   aes(x = factor(state, levels = (unique(dt.rank$state))),
-    #       y = value,
-    #       label = value.text),
-    #   position = position_stack(vjust = 0.5),
-    #   size = 2.8,
-    #   col = 'white'
-    # )  +
-    # geom_text(data = pd,
-    #           aes(x = factor(state, levels = (unique(dt.rank$state))),
-    #               y = value,
-    #               label = value.drug.text),
-    #   position = position_stack(vjust = 1),
-    #   size = 2.8,
-    #   col = 'white'
-    # ) +
     theme_bw() +
     coord_flip() +
     scale_y_continuous(limits = c(0, NA),
@@ -11495,13 +13833,6 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
     pd.box[value.tmp < 5, value.drug.text := NaN]
   }
 
-  # pd.box <- pd.box[, list(state,value.text,value,cause.name)]
-  # tmp <- pd.box[!grepl('COVID', key_causes), list(value = sum(value, na.rm = T)),
-  #        by = c('state', 'year', 'race.eth', 'key_causes', 'cause.name')]
-  # pd.box <- merge(pd.box[!is.na(value.text), list(state,year,race.eth,value.text,cause.name)],
-  #                 tmp, by = c('state', 'year', 'race.eth', 'cause.name'), all = T)
-  # pd[!(is.na(value.tmp)), value.text := paste0(value.tmp, '%')]
-
   pd <- merge(pd, pd.box[!is.na(value.drug.text), list(state,year,race.eth,cause.name,value.drug.text)],
               by = c('state', 'year', 'race.eth', 'cause.name'), all.x = T)
   pd[, cause.name := factor(cause.name, levels = rev(cn))]
@@ -11554,11 +13885,7 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
               )
   ) +
     geom_bar(stat = 'identity') +
-    # geom_bar(data = pd.box.pl,
-    #          aes(x = factor(state, levels = (unique(dt.rank$state))),
-    #              y = value, color =  key_causes), linewidth = .4, fill = NA,
-    #          stat = 'identity'
-    # ) +
+
   ggpattern::geom_bar_pattern(data = pd,
                               aes(x = factor(state, levels = (unique(dt.rank$state))),
                                   y = value,
@@ -11612,12 +13939,12 @@ plot_ranking_incidence_prevalence_us_state_pattern <- function(show.nb, pl.tab, 
       # fill = paste0('Causes of children experiencing\n', contrib.name, ' death')
          , pattern = paste0('Leading cause')
     ) +
-    theme(legend.position = "none",
+    theme(legend.position = "bottom",
+          legend.title=element_text(face = 'bold', family='sans'),
           # panel.grid.major = element_blank(),
           # panel.grid.minor = element_blank(),
           panel.background = element_blank(),
-          strip.background = element_blank(),
-          axis.text.x = element_text(hjust = 1, vjust = 1)
+          strip.background = element_blank()
     )
   if (grepl('rate', par))
   {
@@ -12038,23 +14365,15 @@ plot_ranking_prevalence_orphanhood_rates_us_state_combine_all <- function(show.n
   dt.incid.rate <- p4$dt[, variable := 'incidence']
   p4 <- p4$p
 
-  p.num <- ggpubr::ggarrange(p3, p1, ncol = 2, heights = c(1, 1),
-                           labels = c('A', 'B'),
+  p.num <- ggpubr::ggarrange(p3, p1, ncol = 1, heights = c(1, 1),
+                           labels = c('a', 'b'),
                            widths = c(1, 1), common.legend = T, legend = 'bottom')
-  p.rate <- ggpubr::ggarrange(p4, p2, ncol = 2, heights = c(1, 1),
-                           labels = c('A', 'B'),
+  p.rate <- ggpubr::ggarrange(p4, p2, ncol = 1, heights = c(1, 1),
+                           labels = c('a', 'b'),
                            widths = c(1, 1), common.legend = T, legend = 'bottom')
-
-  # p <- ggpubr::ggarrange(p.num, p.rate, nrow = 2, heights = c(1, 1.1)
-  #                        )
 
   dt.num <- rbind(dt.incid.num, dt.prev.num, use.names = T, fill = T)
   dt.rate <- rbind(dt.incid.rate, dt.prev.rate, use.names = T, fill = T)
-
-  # p
-  # ggsave(file.path(prj.dir, 'results', type.input, paste0('orphans_summary_state_whole_us.png')), p,  w = 18, h = 23)
-  # ggsave(file.path(prj.dir, 'results', type.input, paste0('orphans_summary_state_whole_us.pdf')), p,  w = 18, h = 23)
-
   return(list(p.num = p.num, p.rate = p.rate, dt.num = dt.num, dt.rate = dt.rate))
 }
 

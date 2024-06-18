@@ -180,6 +180,7 @@ clean_state_race_drug <- function(in.dir, cause.type, impute.supp, imp.num)
 # combine and get the top causes with other category
 get_all_causes_deaths <- function(main.path, type.input, impute.supp, sel.nb, imp.num)
 {
+  # main.path <- file.path(in.dir, 'CDC', 'ICD-10_113_Cause', 'US_state_no_race')
   d.rankable <- as.data.table(read.csv(file.path(main.path, paste0(type.input, '_', 'rankable_causes.csv'))))
   d.drug <- as.data.table(read.csv(file.path(main.path, paste0(type.input, '_', 'drug-alcohol_causes.csv'))))
   d.all <- as.data.table(read.csv(file.path(main.path, paste0(type.input, '_', 'alldeaths.csv'))))
@@ -225,21 +226,22 @@ get_all_causes_deaths <- function(main.path, type.input, impute.supp, sel.nb, im
   }
   if (impute.supp)
   {
-   # update 0731 record the suppressed deaths data as -1 and randomly sample those data
+    # update 0731 record the suppressed deaths data as -1 and randomly sample those data
     # 0906 updates: impute the suppressed cells by 5: the medium value from 1-9
-  # for state level
-  y <- nrow(d.rankable[!(grepl('[0-9]', deaths))]) #count the suppression
-  # d.rankable <- d.rankable[!(grepl('[0-9]', deaths)), deaths := sample(1:9, y, replace = TRUE)]
-  d.rankable <- d.rankable[!(grepl('[0-9]', deaths)), deaths := imp.num]
+    # 1024: by 2
+    # for state level
+    y <- nrow(d.rankable[!(grepl('[0-9]', deaths))]) #count the suppression
+    # d.rankable <- d.rankable[!(grepl('[0-9]', deaths)), deaths := sample(1:9, y, replace = TRUE)]
+    d.rankable <- d.rankable[!(grepl('[0-9]', deaths)), deaths := imp.num]
 
-  y <- nrow(d.drug[!(grepl('[0-9]', deaths.drug))]) #count the suppression
-  # d.drug <- d.drug[!(grepl('[0-9]', deaths.drug)), deaths.drug := sample(1:9, y, replace = TRUE)]
-  d.drug <- d.drug[!(grepl('[0-9]', deaths.drug)), deaths.drug := imp.num]
+    y <- nrow(d.drug[!(grepl('[0-9]', deaths.drug))]) #count the suppression
+    # d.drug <- d.drug[!(grepl('[0-9]', deaths.drug)), deaths.drug := sample(1:9, y, replace = TRUE)]
+    d.drug <- d.drug[!(grepl('[0-9]', deaths.drug)), deaths.drug := imp.num]
 
-  # suppression issue at state level
-  y <- nrow(d.all[!(grepl('[0-9]', deaths))]) #count the suppression
-  # d.all <- d.all[!(grepl('[0-9]', deaths)), deaths := sample(1:9, y, replace = TRUE)]
-  d.all <- d.all[!(grepl('[0-9]', deaths)), deaths := imp.num]
+    # suppression issue at state level
+    y <- nrow(d.all[!(grepl('[0-9]', deaths))]) #count the suppression
+    # d.all <- d.all[!(grepl('[0-9]', deaths)), deaths := sample(1:9, y, replace = TRUE)]
+    d.all <- d.all[!(grepl('[0-9]', deaths)), deaths := imp.num]
   }
   d.rankable$deaths <- as.numeric(d.rankable$deaths)
   d.drug$deaths.drug <- as.numeric(d.drug$deaths.drug)
@@ -306,7 +308,6 @@ get_all_causes_deaths <- function(main.path, type.input, impute.supp, sel.nb, im
   dt <- merge(dt, dt.all, by = c('cause.name', 'year'), all.x = T)
 
   # filter the leading 10 {sel.nb} causes
-  # TODO: need to confirm which id should be used
   if (grepl('[0-9]', sel.nb))
   {
     tmp <- dt[causes.state.id <= as.integer(sel.nb)]
@@ -363,21 +364,19 @@ get_all_causes_deaths <- function(main.path, type.input, impute.supp, sel.nb, im
 
   dt <- merge(d.add, d.all, by = c('age', 'sex', 'race.eth', 'state', 'year'), all = T)
   setkey(dt, year, state, race.eth, sex, age)
-  dt
+  # dt
 
   dt[is.na(deaths.total) & deaths  == 0, deaths.total := 0]
-  stopifnot(nrow(dt[is.na(deaths.total)]) == 0)
 
-  dt[is.na(deaths)]
-  # compute for the other cause
   dt[, deaths.others := ifelse(is.na(deaths), deaths.total, deaths.total - deaths)]
+
   # if (grepl('state', type.input))
   # {
   #   dt.causes <- d.rankable[, list(age,sex,race.eth,year,state,cause.name,deaths,causes.state.id,causes.id,causes.year.id)]
   #
   # }else{
   dt.causes <- d.rankable[, list(deaths = sum(as.numeric(deaths), na.rm = T)),
-                      by = c('age', 'sex', 'race.eth', 'state', 'year', 'cause.name', 'causes.state.id', 'causes.id')]
+                          by = c('age', 'sex', 'race.eth', 'state', 'year', 'cause.name', 'causes.state.id', 'causes.id')]
 
   # }
   dt <- dt[, list(age,sex,race.eth,state,year,deaths.others)]
@@ -388,9 +387,10 @@ get_all_causes_deaths <- function(main.path, type.input, impute.supp, sel.nb, im
 
   # dt <- dt[!is.na(age)]
   setkey(dt, year, state, race.eth, sex, age)
-  write.csv(dt, file.path(main.path, paste0(type.input, '_', 'leading-', sel.nb, 'causes_1999-2022_imp-', imp.num ,'.csv')), row.names = F)
 
-  # return(dt)
+  dt[deaths<0]
+
+  write.csv(dt, file.path(main.path, paste0(type.input, '_', 'leading-', sel.nb, 'causes_1999-2022_imp-', imp.num ,'.csv')), row.names = F)
 }
 
 get_excess_deaths <- function(d.deaths, cur.yr)
