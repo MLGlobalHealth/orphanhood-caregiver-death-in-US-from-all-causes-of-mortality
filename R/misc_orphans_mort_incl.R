@@ -1,0 +1,326 @@
+# 240705 consider the mortality rates of children
+# discounting for exposure to mortality when calculating orphanhood prevalence from incidence estimates
+# If a child lost a parent at age 10 in 2015 (incident orphanhood) then that child would be counted as a prevalent orphan at age 15 in 2020. But what if the child also died before 2020?
+# so the idea is that in each analysis, get the mortality rates by single age of children,
+# apply the rates for the incidence estimates by year and age of children, race, ethnicity -- results1
+# then aggregate to the national level by year --> incidence estimates discounting mortality of orphans -- results 2
+# for prevalence, do the aggregation in the past 18 year by race/ethnicity, crudely for all-causes-of-death
+# then aggregate to the national level by year --> prevalence estimates discounting mortality of orphans -- results 3
+
+require(data.table)
+require(tidyverse)
+
+args <- list()
+args$prj.dir <- here::here()
+
+# load the mortality of children by single age at the race/eth level
+extract_death_children = function(prj.dir)
+{
+  in.dir <- file.path(prj.dir, 'data', 'CDC', 'children_mortality')
+
+  infiles <- (list.files(in.dir, pattern = 'children', full.names = TRUE, recursive = F))
+  data_pop_f <- list()
+  for (i in seq_len(length(infiles)))
+  {
+    infile <- infiles[i]
+    cat('Process',infile,'...\n')
+    tmp <- as.data.table(read.delim(infile,header = TRUE, sep = "\t"))
+    note.txt <- unique(tmp[, list(Notes)])
+    str(tmp)
+    if (!('Year' %in% colnames(tmp)))
+    {
+      yr <- note.txt[grepl('Year/Month:', Notes)]
+      yr <- strsplit(yr$Notes, ': ')[[1]][2]
+      if (grepl('\\(', yr))
+      {
+        yr <- strsplit(yr, ' \\(')[[1]][1]
+
+      }
+      tmp[, 'Year.Code' := as.integer(yr)]
+    }
+    if (!('Race' %in% colnames(tmp)) & ('Single.Race.6' %in% colnames(tmp)))
+    {
+      setnames(tmp, 'Single.Race.6', 'Race')
+    }
+
+    if (!('State' %in% colnames(tmp)) & ('Residence.State' %in% colnames(tmp)))
+    {
+      setnames(tmp, c('Residence.State', 'Residence.State.Code'), c('State', 'State.Code'))
+    }
+
+    # combine the ethnicity and race
+    if (('Hispanic.Origin' %in% colnames(tmp)) &  !('Ethnicity' %in% colnames(tmp)))
+    {
+      setnames(tmp, c('Hispanic.Origin'), c( 'Ethnicity'))
+    }
+    str(tmp)
+    tmp <- tmp %>%
+      mutate(  race.eth := case_when(Ethnicity=='Hispanic or Latino'~'Hispanic',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='American Indian or Alaska Native'~'Non-Hispanic American Indian or Alaska Native',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='Asian or Pacific Islander'~'Non-Hispanic Asian',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='Asian'~'Non-Hispanic Asian',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='Native Hawaiian or Other Pacific Islander'~'Non-Hispanic Asian',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='Black or African American'~'Non-Hispanic Black',
+                                     Ethnicity=='Not Hispanic or Latino' & Race=='White'~'Non-Hispanic White',
+                                     Ethnicity=='All' & Race=='All'~'All',
+                                     # TRUE~'Unknown'
+                                     TRUE~'Others'
+      )) %>% as.data.table()
+    tmp <- tmp[race.eth != 'Unknown']
+
+    # rename the colnames
+    tmp <- tmp[, list(Year, Single.Year.Ages.Code, race.eth, Deaths)]
+
+    setnames(tmp, c('Year', 'Single.Year.Ages.Code', 'Deaths'), c('year', 'age', 'deaths'))
+    unique(tmp$race.eth)
+
+    # clean the total death data
+    # exclude uninformative records
+    tmp <- tmp[age != 'NS' & age %in% 0:17]
+    data_pop_f[[i]] <- tmp
+  }
+
+  data_pop_f.all <- data.table::rbindlist( data_pop_f , use.names = T, fill = T)
+  return(data_pop_f.all)
+}
+
+# suppressed values
+
+deaths <- extract_death_children(args$prj.dir)
+
+deaths[, deaths.raw := deaths]
+
+deaths[!grepl('[0-9]', deaths), deaths := 5]
+deaths[grepl('[0-9]', deaths), list(sum(as.integer(deaths))), by = 'year']
+deaths <- deaths[, list(deaths = sum(as.integer(deaths), na.rm = T)),
+                 by = c('year', 'age', 'race.eth')]
+
+# load the population counts of children
+# cat('Process the population sizes of children...\n')
+# {
+#   extract_single_age_child_pop_state_national(file.path(args$prj.dir, 'data'), 'national_adjust')
+# }
+c.pop.race <- as.data.table( read.csv(file.path(args$prj.dir, 'data', 'data', 'pop', paste0('national_adjust', '_usa_single_age_children_population_all.csv'))))
+
+deaths <- merge(deaths, c.pop.race, by = c("age", 'year', 'race.eth'), all.x = T)
+
+# death counts of 'Others' race.eth
+deaths[race.eth == 'Others', sum(deaths), by = 'year']
+deaths[, sum(deaths), by = 'year']
+# 4% in 2020, 2021, ..., 0.06% in 2019...
+
+deaths <- deaths[race.eth != 'Others']
+deaths[, mort.rate.child := deaths/population]
+
+# load the national level incidence estimates
+race.type <- 'national_race_fert_stable_poisson_sampling_rnk_1e4_'
+do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V0526_basline_run'), 'initial_result', paste0('0-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
+# do.main <- do.main[, list(orphans = sum(orphans, na.rm = T),
+#                           cg.loss = sum(cg.loss, na.rm = T)), by = c('year', 'race.eth', 'child.age')]
+do.main <- merge(do.main, deaths, by.x = c('year', 'race.eth', 'child.age'),
+                 by.y = c('year', 'race.eth', 'age'), all.x = T
+                 )
+dt <- do.main[year %in% 2000:2021]
+
+dt[, orphans.live := round(orphans * (1-mort.rate.child))]
+dt[,  cg.loss.live := round( cg.loss * (1-mort.rate.child))]
+
+dt.live <-  dt[, list(orphans.live = sum(orphans.live, na.rm = T),
+           cg.loss.live = sum(cg.loss.live, na.rm = T)), by = c('year', 'race.eth')]
+
+do.orphans <- do.main[, list(orphans = sum(orphans, na.rm = T),
+                          cg.loss = sum(cg.loss, na.rm = T)), by = c('year', 'race.eth')]
+do.orphans <- merge(do.orphans, dt.live, by = c('year', 'race.eth'), all.y = T)
+
+ggplot(do.orphans, aes(x = year, col = race.eth)) +
+  geom_point(aes(y = orphans), col = 'black') +
+  geom_line(aes(y = orphans.live)) +
+  labs(col = 'race/eth for live orphans')
+
+ggplot(do.orphans, aes(x = year, col = race.eth)) +
+  geom_point(aes(y = cg.loss), col = 'black') +
+  geom_line(aes(y = cg.loss.live)) +
+  labs(col = 'race/eth for live children who lost caregivers')
+
+
+do.orphans.national <- do.orphans[, list(orphans = sum(orphans, na.rm = T),
+                                         orphans.live = sum(orphans.live, na.rm = T),
+                                         cg.loss = sum(cg.loss, na.rm = T),
+                                         cg.loss.live = sum(cg.loss.live, na.rm = T)),
+                                  by = c("year")]
+
+do.orphans.national[, discy.rate := (orphans - orphans.live)/orphans]
+do.orphans.national[, discy.cg.rate := (cg.loss - cg.loss.live)/cg.loss]
+
+ggplot(do.orphans.national, aes(x = year)) +
+  geom_point(aes(y = discy.rate), col = 'black') +
+  geom_line(aes(y = discy.rate), col = 'black') +
+  ylab('Discrepancy rate: (orphans - orphans.live)/orphans')
+
+# prevalence rates ----
+get_prevl_child_mort_incul_each_yr <- function(dt, deaths)
+{
+  # prevalence
+  data <- dt[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
+  # reconstruct the data table
+  data <- data[, list(cause.name,child.age,race.eth,year,orphans, orphans.live,cg.loss, cg.loss.live)]
+  data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','race.eth','year')))
+  data[, state := 'National']
+  dt.cum <- list()
+  for (yr in unique(data$year))
+  {
+    tmp <- data[year <= yr]
+    tmp <- tmp[, cur.child.age := yr - year + child.age]
+    tmp <- tmp[, list(value = sum(value, na.rm = T)),
+               by = c('cause.name','state','race.eth','variable','cur.child.age','variable')]
+    tmp[, cur.yr := yr]
+    tmp <- merge(tmp, deaths[, list(age,year,race.eth,mort.rate.child)],
+                 by.x = c('cur.child.age', 'cur.yr', 'race.eth'),
+                 by.y = c('age', 'year', 'race.eth'), all.x = T)
+    tmp[, value := value * (1 - mort.rate.child)]
+    dt.cum[[yr]] <- tmp
+  }
+  dt.cum.all <- data.table::rbindlist( dt.cum, use.names = T, fill = T )
+  # get the rank number
+  dt.cum.all <- dt.cum.all[cur.yr >= (2000)]
+  dt.cum.all[, year := cur.yr]
+  dt.cum.all <- dt.cum.all[cur.child.age < 18]
+
+  unique(dt.cum.all$cur.child.age)
+  dt.cum.all[, child.age.group := ifelse(cur.child.age %in% 0:4, '0-4',
+                                         ifelse(cur.child.age %in% 5:9, '5-9',
+                                                '10-17'))]
+
+
+  return(dt.cum.all)
+}
+
+#
+dt.cum.all <- get_prevl_child_mort_incul_each_yr(dt, deaths)
+
+preval <- dt.cum.all[, list(value = sum(value, na.rm = T)),
+                     by = c('state', 'race.eth', 'variable', 'year')]
+
+preval.national <- preval[year == 2021, list(value = sum(value, na.rm = T)),
+                              by = c('variable', 'year')]
+# get the prevalence rate
+c.pop.race.2021 <- c.pop.race[year == 2021, list(pop = sum(population, na.rm = T)), by = c('race.eth', 'year')]
+preval.race.eth <- merge(preval[year == 2021], c.pop.race.2021, by = c('year', 'race.eth'))
+preval.race.eth[, rate := value/pop*1e2]
+
+
+# preval.race.eth <- as.data.table(reshape2::dcast(preval.race.eth, state+race.eth+year~variable, value.var = 'rate'))
+
+ggplot(preval.race.eth, aes(x = race.eth, fill = variable)) +
+   geom_col(aes(y = rate), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence rate per 100 chidren')
+
+ggplot(preval.race.eth, aes(x = race.eth, fill = variable)) +
+  geom_col(aes(y = value), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence')
+
+
+# national ----
+c.pop.2021 <- c.pop.race[year == 2021 & race.eth != 'Others', list(pop = sum(population, na.rm = T)), by = c('year')]
+preval.national <- merge(preval.national[year == 2021], c.pop.2021, by = c('year'))
+preval.national[, rate := value/pop*1e2]
+
+ggplot(preval.national, aes(x = variable, fill = variable)) +
+  geom_col(aes(y = rate), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence rate per 100 chidren')
+
+ggplot(preval.national, aes(x = race.eth, fill = variable)) +
+  geom_col(aes(y = value), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence')
+
+# preval.race.eth.diff
+# discrepancy rates in terms of value
+preval.race.eth.diff <- as.data.table(reshape2::dcast(preval.race.eth, year+race.eth~variable, value.var = 'value'))
+
+preval.race.eth.diff[, discy.rate := (orphans - orphans.live)/orphans]
+preval.race.eth.diff[, discy.cg.rate := (cg.loss - cg.loss.live)/cg.loss]
+preval.race.eth.diff
+
+ggplot(preval.race.eth.diff, aes(x = race.eth)) +
+  geom_point(aes(y = discy.rate), col = 'black') +
+  ylab('Discrepancy rate: (orphans - orphans.live)/orphans')
+
+# corresponding main figure 2:
+# group by age brackets of children/orpahns ----
+dt.cum.all
+preval <- dt.cum.all[, list(value = sum(value, na.rm = T)),
+                     by = c('child.age.group', 'variable', 'year')]
+
+# get the prevalence rate
+c.pop.race[, child.age.group := ifelse(age %in% 0:4, '0-4',
+                                       ifelse(age %in% 5:9, '5-9',
+                                              '10-17'))]
+
+
+c.pop.race.2021 <- c.pop.race[year == 2021, list(pop = sum(population, na.rm = T)), by = c('child.age.group', 'year')]
+preval.race.eth <- merge(preval[year == 2021], c.pop.race.2021, by = c('year', 'child.age.group'))
+preval.race.eth[, rate := value/pop*1e2]
+preval.race.eth
+
+# preval.race.eth <- as.data.table(reshape2::dcast(preval.race.eth, state+race.eth+year~variable, value.var = 'rate'))
+
+ggplot(preval.race.eth, aes(x = factor(child.age.group, levels = c('0-4', '5-9', '10-17')), fill = variable)) +
+  geom_col(aes(y = rate), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence rate per 100 chidren') +
+  xlab('Age groups of children')
+
+# group by sex of parents
+get_prevl_child_mort_incul_sex_parents <- function(dt)
+{
+  # prevalence
+  data <- dt[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
+  # reconstruct the data table
+  data[, mother.live := mother * (1-mort.rate.child)]
+  data[, father.live := father * (1-mort.rate.child)]
+
+  data <- data[, list(cause.name,child.age,race.eth,year,mother, mother.live,father, father.live)]
+  data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','race.eth','year')))
+  data[, state := 'National']
+  dt.cum <- list()
+  for (yr in unique(data$year))
+  {
+    tmp <- data[year <= yr]
+    tmp <- tmp[, cur.child.age := yr - year + child.age]
+    tmp <- tmp[, list(value = sum(value, na.rm = T)),
+               by = c('cause.name','state','race.eth','variable','cur.child.age','variable')]
+    tmp[, cur.yr := yr]
+    dt.cum[[yr]] <- tmp
+  }
+  dt.cum.all <- data.table::rbindlist( dt.cum, use.names = T, fill = T )
+  # get the rank number
+  dt.cum.all <- dt.cum.all[cur.yr >= (2000)]
+  dt.cum.all[, year := cur.yr]
+  dt.cum.all <- dt.cum.all[cur.child.age < 18]
+
+  unique(dt.cum.all$cur.child.age)
+  dt.cum.all[, child.age.group := ifelse(cur.child.age %in% 0:4, '0-4',
+                                         ifelse(cur.child.age %in% 5:9, '5-9',
+                                                '10-17'))]
+
+
+  return(dt.cum.all)
+}
+
+#
+dt.cum.all <- get_prevl_child_mort_incul_sex_parents(dt)
+preval <- dt.cum.all[, list(value = sum(value, na.rm = T)),
+                     by = c( 'variable', 'year')]
+
+# get the prevalence rate
+
+c.pop.race.2021 <- c.pop.race[year == 2021, list(pop = sum(population, na.rm = T)), by = c('year')]
+preval.race.eth <- merge(preval[year == 2021], c.pop.race.2021, by = c('year'))
+preval.race.eth[, rate := value/pop*1e2]
+preval.race.eth
+
+# preval.race.eth <- as.data.table(reshape2::dcast(preval.race.eth, state+race.eth+year~variable, value.var = 'rate'))
+
+ggplot(preval.race.eth, aes(x = variable, fill = variable)) +
+  geom_col(aes(y = rate), position=position_dodge(preserve = "single")) +
+  ylab('Prevalence rate per 100 chidren')
+#
