@@ -919,3 +919,124 @@ generate_fig3 <- function(do.inc.total, c.pop.race, out.dir, if.rnk)
     cat('Done for Fig3 ...\n')
     }
 }
+
+generate_fig3_extra <- function(do.inc.total, c.pop.race, out.dir, if.rnk)
+{
+  cat('Processing for Fig3 in 2019...\n')
+
+  # without ci.
+  dt.cum.all.age.in <- do.inc.total[year != 2022 & year >= 2000 & stat == 'M']
+  dt.cum.all <- dt.cum.all.age.in[year == 2019]
+
+  # update the cause name to the full name list
+  tmp.dt <- readRDS(file.path(args$prj.dir, 'data', 'poisson_sampling_rnk', 'rep_id-1', 'rankable_cause_deaths_1983-2021.RDS'))
+  tmp.dt <- unique(tmp.dt[, list(cause.name)])
+  tp.mis <- tmp.dt[!(cause.name %in% unique(dt.cum.all$cause.name))]
+  setkey(tp.mis, cause.name)
+  tmp <- as.data.table(
+    expand.grid(
+      cause.name = tp.mis$cause.name,
+      race.eth = unique(dt.cum.all.age.in$race.eth),
+      variable = unique(dt.cum.all.age.in$variable),
+      year = unique(dt.cum.all.age.in$year)
+    ))
+  tmp[, value := 0]
+  tmp[, stat := 'M']
+  dt.cum.all.age.in <- rbind(dt.cum.all.age.in, tmp, use.names = T, fill = T)
+
+  unique(dt.cum.all.age.in$cause.name)
+
+  tmp <- as.data.table(expand.grid(
+    year = unique(dt.cum.all.age.in$year),
+    cause.name = unique(dt.cum.all.age.in$cause.name),
+    race.eth = unique(dt.cum.all.age.in$race.eth),
+    variable = unique(dt.cum.all.age.in$variable),
+    stat = unique(dt.cum.all.age.in$stat)))
+
+  dt.cum.all.age.in <- merge(dt.cum.all.age.in, tmp, by = c('year', 'cause.name', 'race.eth',
+                                                            'variable', 'stat'), all = T)
+  dt.cum.all.age.in[is.na(value), value := 0]
+  dt.cum.all.age.in[, state := 'National']
+  dt.cum.all.age.in <- dt.cum.all.age.in[, list(value = sum(value, na.rm = T)),
+                                         by = c('state', 'year', 'cause.name', 'race.eth',
+                                                'variable', 'stat')]
+
+  # compare from 2000 to 2019
+  dt.cum.all.age.in <- dt.cum.all.age.in[year %in% c(2000, 2019)]
+  setnames(dt.cum.all.age.in, 'variable', 'sex')
+
+  # add the children's population
+  c.pop.race.sum <- c.pop.race[, list(pop = sum(population, na.rm = T)), by = c('state', 'year', 'race.eth')]
+  dt.cum.all.age.in <- merge(dt.cum.all.age.in, c.pop.race.sum, by = c('state', 'year', 'race.eth'), all.x = T)
+  dt.cum.all.age.in[, number := value]
+  dt.contrib.save <- copy(dt.cum.all.age.in)
+  dt.cum.all.age.in[, value := value/pop*1e5]
+  dt.cum.all.age.in[, value := value/10/100]
+
+  dt.cum.all.age.in <- as.data.table(reshape2::dcast(dt.cum.all.age.in[, list(year,cause.name,race.eth,value,sex,stat)],
+                                                     race.eth+cause.name+sex+stat~year, value.var = 'value'))
+
+  dt.cum.all.age.in[is.na(`2000`), `2000` := 0]
+
+  setnames(dt.cum.all.age.in, '2019', '2021')
+
+  dt.cum.all.age.in[is.na(`2021`), `2021` := 0]
+
+  dt.cum.all.age.in[, change.rate := (`2021` - `2000`)]
+
+  # option A
+  if (1)
+  {
+
+    # in the orphanhood
+    dt.all <- dt.cum.all.age.in[, list(loss.t = sum(`2021`, na.rm = T)),
+                                by = c('race.eth','stat')]
+    dt.cum.all.age.in <- merge(dt.cum.all.age.in, dt.all, by = c('race.eth','stat'), all.x = T)
+
+    dt.cum.all.age.in[, contrib := `2021`/loss.t*100]
+    # dt.cum.all.age.in <- dt.cum.all.age.in[`2000` > 0 & `2021` > 0]
+    setkey(dt.cum.all.age.in, race.eth, cause.name)
+
+    dt.cum.all.age.in$cause.name <- as.character(dt.cum.all.age.in$cause.name)
+    options(ggrepel.max.overlaps = Inf)
+    dt.cum.all.age.in[, sex := stringr::str_to_title(sex)]
+    dt.cum.all.age.in[, sex := factor(sex, levels = c('Father', 'Mother'))]
+    dt.cum.all.age.in[, gender := sex]
+    dt.cum.all.age.in[, cause.name := gsub('\\\n.*', '', cause.name)]
+    dt.cum.all.age.in[, cause.name := gsub('#', '', cause.name)]
+    dt.cum.all.age.in[, cause.name := gsub('\\*', '', cause.name)]
+    dt.cum.all.age.in <- dt.cum.all.age.in[cause.name != 'Others']
+
+    dt.cum.all.age.in[sex == 'Father', summary(contrib)]
+    dt.cum.all.age.in[sex == 'Mother', summary(contrib)]
+
+    dt.cum.all.age.in[, sum(contrib), by = 'race.eth']
+
+    dt.cum.all.age.in[sex == 'Father', summary(contrib)]
+    dt.cum.all.age.in[sex == 'Mother', summary(contrib)]
+
+    dt.cum.all.age.in[sex == 'Father', summary( change.rate)]
+    # -0.03, 0.04
+    dt.cum.all.age.in[sex == 'Mother', summary( change.rate)]
+    # -0.02, 0.03
+
+    dt.cum.all.age.in[sex == 'Father', summary(`2021`)]
+    # 0.07
+    dt.cum.all.age.in[sex == 'Mother', summary(`2021`)]
+    # 0.04
+
+    # fix the y-axis to positive (choose this one!)
+    # p3.all <- incidence_rate_change_rate_bubble_each_sex_part_race_children_by_cause_y_posi(pl.tab, 'incid-parent_loss_children', dt.cum.all.age.in, args$prj.dir, title.input = 'Orphans' , type.input.data)
+    p3.all <- incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi_2019(pl.tab, 'incid-parent_loss_children', dt.cum.all.age.in, args$prj.dir, title.input = 'Orphans' , type.input.data)
+
+    p3a <- p3.all$p.f
+    p3b <- p3.all$p.m
+
+    ggsave(file.path(out.dir, paste0('FIG3_2019_National_US_incid-rate-diff-contrib_paternal_orphan_gender_race_children_y_posi_rnk', as.integer(if.rnk), '.png')), p3a,  w = 15.5, h = 17, dpi = 310, limitsize = FALSE)
+    ggsave(file.path(out.dir, paste0('FIG3_2019_National_US_incid-rate-diff-contrib_maternal_orphan_gender_race_children_y_posi_rnk', as.integer(if.rnk), '.png')), p3b,  w = 15.5, h = 17, dpi = 310, limitsize = FALSE)
+    ggsave(file.path(out.dir, paste0('FIG3_2019_National_US_incid-rate-diff-contrib_paternal_orphan_gender_race_children_y_posi_rnk', as.integer(if.rnk), '.pdf')), p3a,  w = 15.5, h = 17, dpi = 310, limitsize = FALSE)
+    ggsave(file.path(out.dir, paste0('FIG3_2019_National_US_incid-rate-diff-contrib_maternal_orphan_gender_race_children_y_posi_rnk', as.integer(if.rnk), '.pdf')), p3b,  w = 15.5, h = 17, dpi = 310, limitsize = FALSE)
+
+    cat('Done for Fig3 in 2019 ...\n')
+  }
+}

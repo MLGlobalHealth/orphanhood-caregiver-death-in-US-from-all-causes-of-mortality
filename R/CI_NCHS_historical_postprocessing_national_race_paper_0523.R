@@ -699,6 +699,9 @@ if (1)
   save(do.inc.total, c.pop.race, file = file.path(args$out.dir, paste0('data_fig3.RData')))
 
 
+  # 240712 similar figure for 2019
+  generate_fig3_extra(do.inc.total, c.pop.race, args$out.dir, if.rnk)
+
   # Table S12 ----
   do.inc.total.raw <- do.inc[variable %in% c('father', 'mother', 'orphans'), list(value = sum(value, na.rm = T)),
                              by = c('year','rep.nb', 'cause.name', 'variable', 'race.eth')]
