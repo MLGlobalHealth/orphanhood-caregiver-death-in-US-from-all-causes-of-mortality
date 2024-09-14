@@ -98,11 +98,22 @@ get_ci_rate_format <- function(tab.incid.num, type)
 
   pds[, value := paste0(M, ' (', CL, ', ', CU, ')')]
   set(pds, NULL, c('CL', 'CU', 'M'), NULL)
-  pds <- as.data.table(reshape2::dcast(pds,
-                                       factor(loss, levels = rnk.var)+race.eth ~
-                                         factor(variable, levels = c('2000', '2005', '2010', '2015', '2019', 'change.rate1',
-                                                                     '2020', '2021', 'change.rate3', 'change.rate2')),
-                                       value.var = 'value'))
+
+  if(nrow(pds[variable == 'change.rate3']) > 0)
+  {
+    pds <- as.data.table(reshape2::dcast(pds,
+                                         factor(loss, levels = rnk.var)+race.eth ~
+                                           factor(variable, levels = c('2000', '2005', '2010', '2015', '2019', 'change.rate1',
+                                                                       '2020', '2021', 'change.rate3', 'change.rate2')),
+                                         value.var = 'value'))
+
+  }else{
+    pds <- as.data.table(reshape2::dcast(pds,
+                                         factor(loss, levels = rnk.var)+race.eth ~
+                                           factor(variable, levels = c('2000', '2019', 'change.rate1')),
+                                         value.var = 'value'))
+
+  }
   colnames(pds)[1] <- 'variable'
   return(pds)
 }
@@ -153,6 +164,35 @@ process_summary_number_rate_change_with_ci_table <- function(tab.incid)
   return(tab.incid)
 }
 
+process_summary_number_rate_change_with_ci_table_2019 <- function(tab.incid)
+{
+  pds.quantiles <- c(.025,.5,.975)
+  pds.quantilelabels <- c('CL','M','CU')
+
+  # process the number table
+  tab.incid.num <- as.data.table(reshape2::dcast(tab.incid, variable+rep.nb+race.eth~year, value.var = 'value' ))
+
+  tab.incid.num[`2000` != 0, change.rate1 := as.character((`2019` - `2000`)/`2000` * 100)]
+  tab.incid.num[`2000` == 0, change.rate1 := '-']
+  tab.incid.num <- get_ci_rate_format(tab.incid.num, 'number')
+  tab.incid.num[, type := 'Number']
+
+  # table for rates
+  tab.incid.rate <- as.data.table(reshape2::dcast(tab.incid, variable+rep.nb+race.eth~year, value.var = 'rate' ))
+
+  tab.incid.rate[`2000` != 0, change.rate1 := as.character(((`2019` - `2000`)/`2000` * 100))]
+  tab.incid.rate[`2000` == 0, change.rate1 := '-']
+  tab.incid.rate <- get_ci_rate_format(tab.incid.rate, 'rate')
+  tab.incid.rate[, type := 'Rate']
+
+  tab.incid <- rbind(tab.incid.num, tab.incid.rate)
+  colnames(tab.incid)[1] <- 'loss'
+  tab.incid[, loss := as.character(loss)]
+  tab.incid <- tab.incid[,lapply(.SD,function(x){ifelse(is.na(x),'-',x)})]
+  return(tab.incid)
+}
+
+#
 process_summary_number_ratio_rate_change_table <- function(tab.incid)
 {
   # process the number table
@@ -477,6 +517,80 @@ process_summary_number_rate_cause_race_change_with_ci_table <- function(tab.inci
   tab <- tab[, list(race.eth,cause.name,orphan_rate_2000,orphan_rate_2021,orphan_rate_change_rate,
                     maternal_orphan_rate_2000,maternal_orphan_rate_2021,maternal_orphan_rate_change_rate,
                     paternal_orphan_rate_2000,paternal_orphan_rate_2021,paternal_orphan_rate_change_rate)]
+
+  return(tab)
+}
+
+# only for 2019 second review
+process_summary_number_rate_cause_race_change_with_ci_table_2019 <- function(tab.incid)
+{
+  pds.quantiles <- c(.025,.5,.975)
+  pds.quantilelabels <- c('CL','M','CU')
+
+  # process the number and rate table
+  tab.incid.num.rate <- process_summary_number_rate_change_with_ci_table_2019(tab.incid)
+
+  tab.out <- tab.incid.num.rate[type == 'Rate', list(loss,`2000`, `2019`, change.rate1)]
+  tab.out[, race.eth :=  unlist(lapply(strsplit(loss, "_"),'[' ,1)) ]
+  tab.out[, loss.type :=  unlist(lapply(strsplit(loss, "_"),'[' ,3)) ]
+  tab.out[, cause.name :=  unlist(lapply(strsplit(loss, "_"),'[' ,2)) ]
+  tmp1 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = '2000'))
+  setnames(tmp1, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_2000', 'maternal_orphan_rate_2000', 'orphan_rate_2000'))
+  tmp2 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = '2019'))
+  setnames(tmp2, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_2019', 'maternal_orphan_rate_2019', 'orphan_rate_2019'))
+  tmp3 <- as.data.table(reshape2::dcast(tab.out, race.eth+cause.name~loss.type  , value.var = 'change.rate1'))
+  setnames(tmp3, c('father', 'mother', 'parents'),
+           c('paternal_orphan_rate_change_rate', 'maternal_orphan_rate_change_rate', 'orphan_rate_change_rate'))
+
+
+  tab <- merge(
+    merge(tmp1, tmp2, by = c('race.eth', 'cause.name')),
+    tmp3, by = c('race.eth', 'cause.name'))
+
+  # update the cause names
+  tab <- update_cause_name(tab)
+  tab <- update_mental_cause_name_pd(tab)
+  unique(tab$cause.name)
+  rnk.cn <- c("Unintentional injuries\nexcluding drug overdose"
+              , "Homicide\nexcluding drug overdose"
+              , "COVID-19"
+              , "Cerebrovascular diseases"
+              , "Chronic liver disease and cirrhosis"
+              , "Chronic lower respiratory diseases"
+              , "Diseases of heart"
+              , "Drug overdose"
+              , "Suicide\nexcluding drug overdose"
+              , "Malignant neoplasms"
+  )
+  rnk.cn <- c("COVID-19"
+              , "Drug overdose"
+
+              , "Unintentional injuries\nexcluding drug overdose"
+              , "Suicide\nexcluding drug overdose"
+              , "Homicide\nexcluding drug overdose"
+              , "Diseases of heart"
+              , "Malignant neoplasms"
+              , "Chronic liver disease and cirrhosis"
+              , "Cerebrovascular diseases"
+              , "Chronic lower respiratory diseases"
+  )
+  tab[, cause.name := factor(cause.name, levels = rnk.cn)]
+
+  tab[, race.eth := factor(race.eth,
+                           levels = c(
+                             "Non-Hispanic American Indian or Alaska Native",
+                             "Non-Hispanic Asian",
+                             "Non-Hispanic Black",
+                             "Hispanic",
+                             "Non-Hispanic White"))]
+
+  setkey(tab, race.eth, cause.name)
+
+  tab <- tab[, list(race.eth,cause.name,orphan_rate_2000,orphan_rate_2019,orphan_rate_change_rate,
+                    maternal_orphan_rate_2000,maternal_orphan_rate_2019,maternal_orphan_rate_change_rate,
+                    paternal_orphan_rate_2000,paternal_orphan_rate_2019,paternal_orphan_rate_change_rate)]
 
   return(tab)
 }

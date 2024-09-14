@@ -299,6 +299,7 @@ generate_fig1e_test <- function(do.inc.total.tab1, deaths.total, p1, out.dir, if
   return(tab.e = tab.e)
   # cat('Done for key figure1 ...\n')
 }
+
 generate_edf5 <- function(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk)
 {
     show.nb = 5
@@ -444,9 +445,212 @@ generate_edf5 <- function(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, i
   return(list(tab.a = tab.a, tab.b = tab.b, tab.c = tab.c, tab.d = tab.d))
 }
 
-
-generate_fig2d <- function(do.prev.age, c.pop.age)
+generate_edf5_sep <- function(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk, type.grandp)
 {
+  # type.grandp == 'pry.grandp.loss' or 'secondary.grandp.loss'
+  if (type.grandp == 'pry.grandp.loss')
+  {
+    type.grandp.plt <- 'primary'
+  }else
+  {
+    type.grandp.plt <- 'secondary'
+  }
+
+  show.nb = 5
+  cat('Processing for EDF5 ...\n')
+  tmp.parent <- do.inc.total[ variable == type.grandp, list(value = sum(output, na.rm = T)),
+                             by = c('cause.name', 'year', 'stat')]
+
+  tmp.parent[, cause.name := gsub('#', '', cause.name)]
+  tmp.parent[, cause.name := gsub('\\*', '', cause.name)]
+  tmp.parent[, state := stat]
+  tmp.parent[, race.eth := 'All']
+
+  # use the leading parental cause-of-death to plot
+
+  pry.cause <- get_leading_cause_national()
+  tmp.parent[!(cause.name %in% pry.cause$raw), cause.name := 'Others']
+
+  # add COVID19 for empty years
+  tp.add <- as.data.table(expand.grid(cause.name = unique(tmp.parent$cause.name),
+                                      year = unique(tmp.parent$year),
+                                      state = unique(tmp.parent$state),
+                                      race.eth = unique(tmp.parent$race.eth)))
+  tmp.parent <- merge(tmp.parent, tp.add, by = c('cause.name', 'year', 'state', 'race.eth'), all.y = T)
+  tmp.parent[is.na(value), value := 0]
+
+  tab.a <- copy(tmp.parent)
+
+  # subfigA: incidence number
+  pa <- process_national_map_orphans_vsplit(show.nb, pl.tab, 'grandp', tmp.parent[year >= 2000 & state == 'M'], args$prj.dir, title.input = 'Number of orphans', type.input)
+  pa <- pa +
+    # scale_y_continuous(limits = c(0, 55000),
+    #                    labels = scales::comma
+    #                    ,
+    #                    expand = expansion(mult = c(0, 0.01))
+    # ) +
+    theme(legend.position = 'bottom') +
+    ylab(paste0('Incidence of ', type.grandp.plt,'\ngrandparent caregiver death'))
+
+  # subfig C: incidence rate
+  # load the cdc data after year 1990
+  c.pop.t <- c.pop.all[, list(pop = sum(population, na.rm = T)),
+                       by = c( 'year')]
+  tmp.parent.line <- merge(tmp.parent, c.pop.t, by = c( 'year'), all.x = T)
+
+  tmp.parent.line[, value := value / pop * 1e5]
+  tmp.parent.line[, value := value /10 / 100]
+
+  tp.add <- as.data.table(expand.grid(cause.name = unique(tmp.parent.line$cause.name),
+                                      year = unique(tmp.parent.line$year),
+                                      state = unique(tmp.parent.line$state),
+                                      race.eth = unique(tmp.parent.line$race.eth)))
+  tmp.parent.line <- merge(tmp.parent.line, tp.add, by = c('cause.name', 'year', 'state', 'race.eth'), all.y = T)
+  tmp.parent.line[is.na(value), value := 0]
+
+  tab.c <- copy(tmp.parent.line)
+
+  pc <- process_national_lines_orphans_vsplit(show.nb, pl.tab, 'parents', tmp.parent.line[state == 'M' & !(grepl('Other', cause.name)) & year >= 2000], args$prj.dir, title.input = 'Number of orphans', type.input)
+  pc <- pc + theme(legend.position = 'none') +
+    ylab(paste0('Incidence rate of ', type.grandp.plt,'\ngrandparent caregiver death\nper 100 children'))
+
+  # prevalence
+  tp <- do.prev.total.tab[loss.type == type.grandp]
+  unique(tp$loss.type)
+  unique(tp$stat)
+  pry.cause <- get_leading_cause_national()$raw
+  tp[!(cause.name %in% pry.cause), cause.name := 'Others']
+  # do.preval.all
+  tp[, race.eth := 'All']
+  tp[, state := stat]
+  unique(tp$state)
+
+  # B. orphans
+  tp.add <- as.data.table(expand.grid(cause.name = unique(tp$cause.name),
+                                      year = unique(tp$year),
+                                      state = unique(tp$state),
+                                      race.eth = unique(tp$race.eth)))
+  unique(tp$state)
+
+  tp <- merge(tp, tp.add, by = c('cause.name', 'year', 'state', 'race.eth'), all.y = T)
+
+  tp[is.na(value), value := 0]
+  tab.b <- copy(tp)
+
+  pb <- process_national_map_orphans_vsplit(show.nb, pl.tab, 'preval-parents', tp[state == 'M'], args$prj.dir, title.input = 'Number of orphans', type.input)
+  pb <- pb +
+    # scale_y_continuous(limits = c(0, 320000),
+    #                    labels = scales::comma
+    #                    ,
+    #                    expand = expansion(mult = c(0, 0.01))
+    # ) +
+    theme(legend.position = 'bottom') +
+    ylab(paste0('Prevalence of ', type.grandp.plt,'\ngrandparent caregiver death'))
+
+  # subfig D: incidence rate
+  tp <- do.prev.total.tab[loss.type == type.grandp]
+  unique(tp$loss.type)
+  unique(tp$stat)
+  pry.cause <- get_leading_cause_national()$raw
+  tp[!(cause.name %in% pry.cause), cause.name := 'Others']
+  # do.preval.all
+  tp[, race.eth := 'All']
+  tp[, state := stat]
+  unique(tp$state)
+
+  # B. orphans
+  tp.add <- as.data.table(expand.grid(cause.name = unique(tp$cause.name),
+                                      year = unique(tp$year),
+                                      state = unique(tp$state),
+                                      race.eth = unique(tp$race.eth)))
+  unique(tp$state)
+
+  tp <- merge(tp, tp.add, by = c('cause.name', 'year', 'state', 'race.eth'), all.y = T)
+  unique(tp$stat)
+  tp[is.na(state)]
+  tp[is.na(value), value := 0]
+  tp <- merge(tp, c.pop.t, by = c('year'), all.x = T)
+  # 1013 change to per 100 children
+  tp[, value := value / pop * 1e5]
+  tp[, value := value/10/100]
+  tp[, race.eth := 'All']
+  tp[is.na(value), value := 0]
+  tab.d <- copy(tp)
+
+  pd <- process_national_lines_orphans_vsplit(show.nb, pl.tab, 'preval-parents', tp[state == 'M' & !(grepl('Other', cause.name))], args$prj.dir, title.input = 'Number of orphans', type.input)
+  pd <- pd +
+    theme(legend.position = 'none') +
+    ylab(paste0('Prevalence rate of ', type.grandp.plt,'\ngrandparent caregiver death\nper 100 children'))
+
+  if (type.grandp == 'pry.grandp.loss')
+  {
+    p.incid <- ggpubr::ggarrange(pa, pc, ncol = 1,
+                                 heights = c(1.2, 1),
+                                 labels = c('a', 'c'),
+                                 align = 'v'
+                                 # , common.legend = T, legend = 'none'
+    )
+
+    p.preval <- ggpubr::ggarrange(pb, pd, ncol = 1,
+                                  heights = c(1.2, 1),
+                                  labels = c('b', 'd'),
+                                  align = 'v'
+                                  # , common.legend = T, legend = 'none'
+    )
+
+  }
+
+  if (type.grandp == 'secondary.grandp.loss')
+  {
+    p.incid <- ggpubr::ggarrange(pa, pc, ncol = 1,
+                                 heights = c(1.2, 1),
+                                 labels = c('e', 'g'),
+                                 align = 'v'
+                                 # , common.legend = T, legend = 'none'
+    )
+
+    p.preval <- ggpubr::ggarrange(pb, pd, ncol = 1,
+                                  heights = c(1.2, 1),
+                                  labels = c('f', 'h'),
+                                  align = 'v'
+                                  # , common.legend = T, legend = 'none'
+    )
+
+  }
+
+  p.comb.key <- ggpubr::ggarrange(p.incid, p.preval, ncol = 2,
+                                  widths = c(1, 1),
+                                  align = 'h'
+                                  , common.legend = T, legend = 'bottom'
+  )
+  # ggsave(file.path(out.dir, paste0('EDF5_summary_cause_', type.grandp, '_loss_rnk', as.integer(if.rnk), '.png')), p.comb.key,  w = 14, h = 8, dpi = 310, limitsize = FALSE)
+  # ggsave(file.path(out.dir, paste0('EDF5_summary_cause_', type.grandp, '_loss_rnk', as.integer(if.rnk), '.pdf')), p.comb.key,  w = 14, h = 8, dpi = 310, limitsize = FALSE)
+
+  cat(paste0('Done EDF5 sep by ', type.grandp,' ...\n'))
+  return(list(fig = p.comb.key, tab.a = tab.a, tab.b = tab.b, tab.c = tab.c, tab.d = tab.d))
+}
+
+generate_edf5_sep_comb <- function(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk)
+{
+  tmp1 <- generate_edf5_sep(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk, type.grandp = 'pry.grandp.loss')
+  tmp2 <- generate_edf5_sep(do.inc.total, do.prev.total.tab, c.pop.all, out.dir, if.rnk, type.grandp = 'secondary.grandp.loss')
+  p.comb.key <- ggpubr::ggarrange(tmp1$fig, tmp2$fig, ncol = 1,
+                                  widths = c(1, 1),
+                                  heights = c(1,1),
+                                  align = 'v'
+                                  , common.legend = T, legend = 'bottom'
+  )
+  ggsave(file.path(out.dir, paste0('EDF5_summary_cause_grandp_sep_loss_rnk', as.integer(if.rnk), '.png')), p.comb.key,  w = 14, h = 20, dpi = 310, limitsize = FALSE)
+  ggsave(file.path(out.dir, paste0('EDF5_summary_cause_grandp_sep_loss_rnk', as.integer(if.rnk), '.pdf')), p.comb.key,  w = 14, h = 20, dpi = 310, limitsize = FALSE)
+  cat('Done EDF5 sep by types of grandparent...\n')
+
+  return(list(pry.tab = tmp1, sec.tab = tmp2))
+
+}
+
+generate_fig2d <- function(do.prev.age.raw, c.pop.age)
+{
+  do.prev.age <- copy(do.prev.age.raw)
   setnames(do.prev.age, 'child.age.group', 'age.group')
   do.prev.age$age.group <- factor(paste0('Ages ', do.prev.age$age.group, ' years'), levels = c('Ages 0-17 years', 'Ages 0-4 years', 'Ages 5-9 years', 'Ages 10-17 years'))
   dt.cum.all.age.pre <- do.prev.age[year >= 2000]
@@ -806,8 +1010,7 @@ generate_fig3 <- function(do.inc.total, c.pop.race, out.dir, if.rnk)
   dt.cum.all <- dt.cum.all.age.in[year == 2021]
 
   # update the cause name to the full name list
-  tmp.dt <- readRDS(file.path(args$prj.dir, 'data', 'poisson_sampling_rnk', 'rep_id-1', 'rankable_cause_deaths_1983-2021.RDS'))
-  tmp.dt <- unique(tmp.dt[, list(cause.name)])
+  tmp.dt <- readRDS(file.path(args$prj.dir, 'data', 'cause_name_all.rds'))
   tp.mis <- tmp.dt[!(cause.name %in% unique(dt.cum.all$cause.name))]
   setkey(tp.mis, cause.name)
   tmp <- as.data.table(

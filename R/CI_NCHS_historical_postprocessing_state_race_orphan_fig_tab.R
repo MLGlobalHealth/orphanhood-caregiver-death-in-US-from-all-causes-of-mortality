@@ -31,7 +31,6 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
 
 }
 args$race.type <- 'national_race_fert_stable_poisson_sampling_rnk_'
-
 args$in.dir <- file.path(args$prj.dir, 'data')
 
 # User defined version of the results ----
@@ -60,6 +59,7 @@ if (!dir.exists(file.path(args$prj.dir, 'results', summary.type.input)))
 
 
 # summary.type.input <- paste0('summary_output_main_', v.name)
+args$in.dir <- file.path(args$prj.dir, 'data')
 args$out.dir <- file.path(args$prj.dir, 'results', summary.type.input)
 
 str(args)
@@ -70,11 +70,11 @@ source(file.path(args$prj.dir,"R","saving_estimates.R"))
 source(file.path(args$prj.dir,"R","extract_leading_causes_deaths_state_cdc.R"))
 source(file.path(args$prj.dir,"R","result_table_function.R"))
 source(file.path(args$prj.dir,"R","process_state_race_functions.R"))
+source(file.path(args$prj.dir,"R","prevalence_computation_function.R"))
 
 # functions to tables and figures ----
 source(file.path(args$prj.dir,"R","tables_state_paper.R"))
 source(file.path(args$prj.dir,"R","figures_state_paper.R"))
-
 
 # prevalence function
 get_preval_orphan_loss_age_children_all_yr <- function(do.age.children.par.grand.all, show.nb)
@@ -271,6 +271,7 @@ plot_state_race_orphanhood_comp <- function(dt.state.race, dt.state, if.adj, prj
   tmp.pl <- update_mental_cause_name_pd(tmp.pl)
 
 
+  # EDF9b ----
   p <- ggplot(tmp.pl[!is.na(value)], aes(x = year, y = value, col = variable,
                                          shape = variable, size = variable,
                                          alpha = alpha.input)) +
@@ -357,7 +358,11 @@ if (
   infile <- list.files(file.path(args$prj.dir, 'results', type.input.state.race, 'initial_result'),
                        pattern = paste0('summary_cg'), full.names = TRUE, recursive=F)
   infiles <-  unlist(infile)
-  # infiles <- infiles[1:10]
+
+
+  # we assume the mort rates in each state is stable
+  sur.rate <- process_child_survival_rate_state(args$prj.dir)
+
   # all incidence estimates
   do <- list()
   # # all prevalence estimates without cause.name
@@ -391,61 +396,39 @@ if (
     do.age.children.par.grand.all[, cause.name := gsub('#', '', cause.name)]
 
     do.age.children.par.grand.all.raw <- do.age.children.par.grand.all[, year := as.integer(year)]
-    dt.cum.all <- get_preval_orphan_loss_age_children_all_yr(do.age.children.par.grand.all.raw, 'all')
-    tmp <- dt.cum.all[grepl('reval', variable)]
+    dt.cum.all <- get_preval_all_cg_loss_types_age_children_child_mort_incul_all_yr_state(sur.rate, do.age.children.par.grand.all.raw)
 
-    unique(tmp$loss.type)
+    tmp <- copy(dt.cum.all)
 
-    # saving all cause names
-    tmp[, loss.type := factor(loss.type,
-                              levels = c('all', 'mother', 'father', 'orphans'))]
-
-    # tmp[, loss.type := factor(loss.type, levels = c( 'parents', 'grandparent caregivers','all caregivers'))]
+    setnames(tmp, 'variable', 'loss.type')
     setkey(tmp, year, cause.name, loss.type, state, race.eth)
+    unique(tmp$loss.type)
+    tmp <- as.data.table(reshape2::dcast(tmp, year+cause.name+state+race.eth+cur.child.age~loss.type, value.var = 'value'))
+    tmp <- as.data.table(reshape2::melt(tmp, id = c( 'year', 'cause.name', 'state', 'race.eth', 'cur.child.age')))
+    tmp <- tmp[, list(value = round(sum(value, na.rm = T))),
+               by = c('cause.name', 'state', 'race.eth', 'variable', 'year')]
+    setnames(tmp, 'variable', 'loss.type')
+    setkey(tmp, year, cause.name, loss.type, state, race.eth)
+
     do.preval[[i]] <- copy(tmp)
     do.preval[[i]][, rep.nb := id]
-
-
   }
+
   cat('Saving incidence for each iteration...\n')
   do.all <- data.table::rbindlist( do, use.names = T, fill = T )
-  # saveRDS(do.all, file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', race.type, 'summary_incidence.rds')))
-  # write.csv(do.all[rep.nb %in% c(1, 2, 3, 4, 5)], file.path(args$out.dir, paste0('hist_', race.type, 'summary_incidence_test.csv')), row.names = F)
-
   do.preval.all <- data.table::rbindlist( do.preval, use.names = T, fill = T )
-  # saveRDS(do.preval.all, file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', race.type, 'summary_prevalence.rds')))
-  # do.preval.all <- data.table::rbindlist( do.preval.all[rep.nb %in% c(1, 2, 3, 4, 5)], use.names = T, fill = T )
-  # write.csv(do.preval.all[rep.nb %in% c(1, 2, 3, 4, 5)], file.path(args$out.dir, paste0('hist_', race.type, 'summary_prevalence_test.csv')), row.names = F)
 
   # SAVING THE DATA
   cat(paste0('Saving chains into ', args$out.dir, '\n'))
   file.name <- file.path(args$out.dir, paste0('hist_', state.race.type, 'summary_raw_mcmc_chains.RData'))
   save(do.all, do.preval.all, file = file.name)
-
-  # # Get the medium value for the state level adj
-  # cat('Get the medium value for the state level adj ...\n')
-  # load(file.path(args$out.dir, paste0('hist_', race.type, 'summary_raw_mcmc_chains.RData')))
-   # write.csv(do.all[rep.nb %in% c(1, 2, 3, 4, 5)], file.path(args$out.dir, paste0('hist_', race.type, 'summary_incidence_test.csv')), row.names = F)
 }
 
 # Scaling the incidence to the magnitude of national level ----
-# if (
-#   !file.exists(
-#     file.path(args$out.dir, paste0('hist_',state.race.type, 'M_summary_orphan_loss.csv'))
-#   )
-# )
 load(file.path(args$out.dir, paste0('hist_', state.race.type, 'summary_raw_mcmc_chains.RData')))
 
 {
   cat('Processing for the MED')
-  # 0910
-  # get the quantitles for orphanhoods
-  # first load all the needed files and then filtered out the medium, the confidence intervals
-
-  # Loading all MCMC chains
-  # do.all <- as.data.table(readRDS(file.path(args$out.dir, paste0('hist_', state.race.type, 'summary_incidence.rds'))))
-
-
   cat('Process the 50% quantile estimates at state by race/eth level...\n')
   if (!file.exists(
     file.path(args$out.dir, paste0('hist_',state.race.type, 'M_summary_orphan_loss.csv'))
@@ -515,7 +498,7 @@ if (1)
 
   resample.type <- paste0(resample.type, '_')
 
-  # Fig state by race ----
+  # Table S14 state by race ----
   if (1)
   {
 
@@ -595,7 +578,7 @@ if (1)
     tmp[, new.cause.name := cause.name]
     set(tmp, NULL, 'cause.name', NULL)
     tmp[race.eth != 'Hispanic' , new.cause.name := '']
-    openxlsx::write.xlsx(tmp, file = file.path(args$out.dir, 'STab16_state_race_prevalence_summary.xlsx'),
+    openxlsx::write.xlsx(tmp, file = file.path(args$out.dir, 'STab14_state_race_prevalence_summary.xlsx'),
                          rowNames = F)
     set(tmp, NULL, c('deaths.2021', 'births.nchs','deaths.nchs'), NULL)
     tmp[, id.rk := seq_len(nrow(tmp))]
@@ -607,56 +590,9 @@ if (1)
     tmp.sep <- rbind(tmp, tmp.sep)
     setkey(tmp.sep, id.rk)
     set(tmp.sep, NULL, 'id.rk', NULL)
-    capture.output(print(xtable::xtable(tmp.sep), include.rownames=FALSE), file = file.path(args$out.dir, 'STab16_state_race_prevalence_summary.txt'))
+    capture.output(print(xtable::xtable(tmp.sep), include.rownames=FALSE), file = file.path(args$out.dir, 'STab14_state_race_prevalence_summary.txt'))
 
-    # fig
-    if (0)
-    {
-      tmp <- rbind(dt.prev.orphans.state.race, dt.prev.orphans.state[, race.eth := 'Weighted all race & ethnicity'], use.names = T, fill = T)
-      tmp <- tmp[loss.type == 'orphans']
-
-      tmp <- rbind(tmp, dt.prev.orphans.state.level[, race.eth := 'All race & ethnicity'], use.names = T, fill = T)
-      tmp <- tmp[loss.type == 'orphans']
-
-      rnk.race <- c("Hispanic" ,
-                    "Non-Hispanic American Indian or Alaska Native",
-                    "Non-Hispanic Asian" ,
-                    "Non-Hispanic Black" ,
-                    "Non-Hispanic White",
-                    "Weighted all race & ethnicity",
-                    "All race & ethnicity")
-      tmp <- merge(tmp, data.table(race.eth = rnk.race), by = c('race.eth'), all.y = T)
-
-      p <- prevalence_summary_state_race_orphanhood_bar(tmp)
-      cat('Done for figure by state and race & ethnicity ...\n')
-      ggsave(file.path(args$prj.dir, 'results', type.input, paste0('SuppFig_summary_orphans_state_race.png')), p,  w = 20, h = 16, dpi = 310, limitsize = FALSE)
-      ggsave(file.path(args$prj.dir, 'results', type.input, paste0('SuppFig_summary_orphans_state_race.pdf')), p,  w = 20, h = 16, dpi = 310, limitsize = FALSE)
-    }
     cat('Done ...\n')
   }
 
 }
-
-
-stop()
-# -----
-if (1)
-{
-  # 0910
-  # get the quantitles for orphanhoods
-  # first load all the needed files and then filtered out the medium, the confidence intervals
-  cat('Process the summary outputs aggregated over race and ethnicity...\n')
-  pds.quantiles <- c(.025,.5,.975)
-  pds.quantilelabels <- c('CL','M','CU')
-
-  ##
-  cat('Process the summary outputs at state level...\n')
-  # get_quantiles_estimates_historical_results(args$prj.dir, type.input.state, raw.type = state.type, summary.type.input, if.agg = F)
-  get_quantiles_estimates_historical_results(args$prj.dir, type.input.state.race, raw.type = state.type, summary.type.input, if.agg = F)
-
-  # compare the state level and state by race level with the Medium estimates,
-  # then use the M estimates to update for each iteration
-  get_estimates_historical_state_race_adjust(args$prj.dir, summary.type.input, race.type)
-}
-cat('Done!\n')
-gc()

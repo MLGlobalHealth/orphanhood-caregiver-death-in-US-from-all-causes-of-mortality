@@ -520,6 +520,182 @@ process_usa_state_national_skip_generation_age_all_year_ACS_resample = function(
   write.csv(dg, file.path(resample.dir, paste0(type.input, '_skip_generation_total_cg_', cur.yr, '.csv')), row.names = F)
 }
 
+# 240722 separate the grandp loss as we did before
+process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat <- function(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp)
+{
+  # this function is used to compute the proportion of adults older than 30 years providing different types of cares
+
+  # type.grandp" total_cr: total number of gp in the household (co-residenting)
+  # total_pc: primary caregiver (grandp responsible for grandchildren)
+  # custodial: custodial  grandp responsible for grandchildren with no parents of grandchildren present
+
+  # get population over 30
+  # for men
+  if (grepl('race', type.input))
+  {
+    if (!(file.exists(file.path(resample.dir, paste0('skip_generation_national_raceth_', type.grandp, '_summary.csv')))))
+    {
+      # load the ACS data
+      get_grandp_household_cg_national_state_ACS_ci_sep( in.dir, rep.nb)
+    }
+    # load the pg data file
+    dg <- as.data.table(read.csv(file.path(resample.dir, paste0('skip_generation_national_raceth_', type.grandp, '_summary.csv'))))
+    # save in the previous path, and copy to the resampled path for the following-year estimation
+    # write.csv(dg, file.path(resample.dir, 'skip_generation_national_raceth_total_cg_summary.csv'), row.names = F)
+
+    if (grepl('state', type.input))
+    {
+      # the state by race level analysis
+      dg <- dg[state != 'United States']
+    }else{
+      dg <- dg[state == 'United States']
+      dg[, state := 'National']
+    }
+  }else {
+    if (!(file.exists(file.path(resample.dir, paste0('skip_generation_state_national_', type.grandp, '_summary.csv')))))
+    {
+      # Process the nb of orphans by grandparents per state
+      get_grandp_household_cg_national_state_ACS_ci_sep(in.dir, rep.nb)
+    }
+    dg <- as.data.table(read.csv(file.path( resample.dir, paste0('skip_generation_state_national_', type.grandp, '_summary.csv'))))
+    # save in the previous path, and copy to the resampled path for the following-year estimation
+    # write.csv(dg, file.path(resample.dir, 'skip_generation_state_national_total_cg_summary.csv'), row.names = F)
+
+    if (type.input == 'national')
+    {
+      dg <- dg[grepl('United', state)]
+      dg[, state := 'National']
+
+    }else{
+      dg <- dg[!(grepl('United', state))]
+    }
+  }
+  # select the correct year
+  dg <- dg[year == cur.yr]
+  if (grepl('race', type.input))
+  {
+    if (grepl('state', type.input))
+    {
+      # state race
+      if (!file.exists(
+        file.path(in.dir, 'data', 'pop', paste0('state_race_usa_population_all.csv'))))
+      {
+        pop.f <- process_pop_state_race(in.dir, 'female')
+        pop.m <- process_pop_state_race(in.dir, '_male')
+        tmp <- rbind(pop.f, pop.m)
+        tmp[age.cat %in% c("1", "1-4", "5-9", "10-14"), age.cat := '0-14']
+        tmp <- tmp[, list(population = sum(population, na.rm = T)),
+                   by = c('state', 'year', 'sex', 'age.cat', 'race.eth')]
+        unique(tmp$age.cat)
+        write.csv(tmp,  file.path(in.dir, 'data', 'pop', 'state_race_usa_population_all.csv'), row.names = F)
+      }
+      pop <- as.data.table(read.csv(file.path(in.dir, 'data', 'pop', paste0('state_race_usa_population_all.csv'))))
+      pop <- pop[year == cur.yr]
+      pop <- pop[!(age.cat %in% c('0-14', '15-19', '20-24', '25-29'))]
+
+    }else{
+      # national race
+      if (!file.exists(
+        file.path(in.dir, 'data', 'pop', paste0('national_race', '_', 'nchs-cdc_population_5yr_all.csv'))))
+      {
+        process_combine_national_race_pop_all_year(in.dir, type.input)
+      }
+      pop <- as.data.table(read.csv(file.path(in.dir, 'data', 'pop', paste0('national_race', '_', 'nchs-cdc_population_5yr_all.csv'))))
+      pop <- pop[year == cur.yr]
+      pop <- pop[!(age.cat %in% c('0-14', '15-19', '20-24', '25-29'))]
+    }
+  }
+  if (!grepl('race', type.input))
+  {
+    # state or national
+    if (!file.exists(
+      file.path(in.dir, 'data', 'pop', paste0(type.input, '_', 'nchs-cdc_population_5yr_all.csv'))))
+    {
+      process_combine_national_state_pop_all_year(in.dir, type.input)
+    }
+    pop <- as.data.table(read.csv(file.path(in.dir, 'data', 'pop', paste0(type.input, '_', 'nchs-cdc_population_5yr_all.csv'))))
+    pop <- pop[year == cur.yr]
+    pop <- pop[!(age.cat %in% c('0-14', '15-19', '20-24', '25-29'))]
+  }
+  # aggregate the age groups to 30+
+  pop[, age := '30+']
+  pop[, list(population = sum(population, na.rm = T)),
+      by = c('age', 'state', 'sex', 'race.eth')]
+  data_pop_m_agec <- pop[sex == 'Male', list(population_m = sum(population, na.rm = T)),
+                         by = c('state', 'age', 'race.eth')]
+  data_pop_f_agec <- pop[sex == 'Female', list(population_f = sum(population, na.rm = T)),
+                         by = c('state', 'age', 'race.eth')]
+  pop <- merge(data_pop_f_agec, data_pop_m_agec, by = c('state', 'age', 'race.eth'))
+  dg <- merge(pop, dg, by = c('state', 'age', 'race.eth'), all.y = T)
+  # print(dg)
+  if (grepl('custo', type.grandp))
+  {
+    # primary care + skip generation
+    dg[, custodial_female := cg_female/population_f]
+    dg[, custodial_male := cg_male/population_m]
+    set(dg, NULL, c('cg_female', 'cg_male'), NULL)
+  }
+  if (grepl('total_cg', type.grandp))
+  {
+    # co-residing grandp in the household
+    dg[, coresid_female := cg_female/population_f]
+    dg[, coresid_male := cg_male/population_m]
+    set(dg, NULL, c('cg_female', 'cg_male'), NULL)
+  }
+  if (grepl('total_pc', type.grandp))
+  {
+    # total primary care
+    dg[, pc_female := cg_female/population_f]
+    dg[, pc_male := cg_male/population_m]
+    set(dg, NULL, c('cg_female', 'cg_male'), NULL)
+  }
+  if (grepl('total_pg', type.grandp))
+  {
+    # total primary care
+    dg[, pc_female := cg_female/population_f]
+    dg[, pc_male := cg_male/population_m]
+    set(dg, NULL, c('cg_female', 'cg_male'), NULL)
+  }
+  cat(paste0('Computing the prop of grandp in type ', type.grandp, ' in the population \n'))
+  # print(dg)
+
+  dg <- as.data.table(dg)
+  # in.dir, 'grandparents' --> resample.dir
+
+  return(dg)
+  # write.csv(dg, file.path(resample.dir, paste0(type.input, '_skip_generation_', type.grandp, '_', cur.yr, '.csv')), row.names = F)
+}
+
+# combine all types of grandp
+process_usa_state_national_grandp_all_age_year_ACS_resample_subcat <- function(in.dir, resample.dir, rep.nb, cur.yr, type.input)
+{
+  total.coresi <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'total_cg')
+  total.pry <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'total_pc')
+  custodial <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'custodinal')
+
+  gp <- merge(merge(total.coresi, total.pry, by = c('state', 'age', 'race.eth', 'year')),
+                    custodial, by = c('state', 'age', 'race.eth', 'year'))
+  gp <- gp[, list(state,race.eth,year,age,coresid_female,coresid_male,pc_female,pc_male,custodial_female,custodial_male)]
+  write.csv(gp, file.path(resample.dir, paste0(type.input, '_grandp_all_types_', cur.yr, '.csv')), row.names = F)
+
+
+}
+
+# 0731 state level
+process_usa_state_national_grandp_all_age_year_ACS_resample_subcat_state <- function(in.dir, resample.dir, rep.nb, cur.yr, type.input)
+{
+  total.coresi <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'total_cg')
+  total.pry <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'total_pg')
+  custodial <- process_usa_state_national_grandp_prop_all_year_ACS_resample_subcat(in.dir, resample.dir, rep.nb, cur.yr, type.input, type.grandp = 'custodinal')
+
+  gp <- merge(merge(total.coresi, total.pry, by = c('state', 'age', 'race.eth', 'year')),
+              custodial, by = c('state', 'age', 'race.eth', 'year'))
+  gp <- gp[, list(state,race.eth,year,age,coresid_female,coresid_male,pc_female,pc_male,custodial_female,custodial_male)]
+  write.csv(gp, file.path(resample.dir, paste0(type.input, '_grandp_all_types_', cur.yr, '.csv')), row.names = F)
+
+
+}
+
 # from v0924: we add 5%  uncertainty around the estimated grandparents caregivers number in the household
 process_usa_state_national_skip_generation_age_all_year_resample = function(in.dir, resample.dir, rep.nb, cur.yr, type.input)
 {
@@ -821,6 +997,7 @@ combine_acs_househould_with_ci <- function(in.dir)
   return(data)
 }
 
+# total gp primary data
 get_grandp_household_cg_national_state_ACS_ci <- function(in.dir, rep.nb)
 {
   if (!(file.exists(file.path(in.dir, 'grandparents', paste0('ACS_househould_margins_error.csv')))))
@@ -836,7 +1013,7 @@ get_grandp_household_cg_national_state_ACS_ci <- function(in.dir, rep.nb)
   dg[, Male := as.numeric(gsub('%', '', Male))]
   dg[, Female := as.numeric(gsub('%', '', Female))]
   dg[, Total := as.numeric(gsub(',', '', Total))]
-  # get the total number of skip generation, i.e. grandparents in the household
+  # get the total number of grandparents in the household
   setnames(dg, 'lab.name', 'state')
   dg[, race.eth := 'All']
   # delete the abnormal state name in year 2011 United States Virgin Islands
@@ -934,7 +1111,7 @@ get_grandp_household_cg_national_race_ACS_ci <- function(in.dir, rep.nb)
   dg[, Total := as.numeric(gsub(',', '', Total))]
   dg[, Hispanic := as.numeric(gsub('%', '', Hispanic))]
 
-  # get the total number of skip generation, i.e. grandparents in the household
+  # get the total number of grandparents in the household
   # delete the abnormal state name in year 2011 United States Virgin Islands
   # delete the national U.S.
   dg <- dg[!grepl('United States Virgin Islands', lab.name)]
@@ -1075,4 +1252,293 @@ get_grandp_household_cg_national_race_ACS_ci <- function(in.dir, rep.nb)
   }
   cat(paste0('\nSaving ACS grandparents household dataset at national race level to dir', rep.dir, '\n'))
   write.csv(dt.grandp, file.path(in.dir, 'grandparents', rep.dir, paste0('skip_generation_national_raceth_total_cg_summary.csv')), row.names = F)
+}
+
+# sep-category gp primary data
+get_grandp_household_cg_national_state_ACS_ci_sep <- function(in.dir, rep.nb)
+{
+  # get the total number of primary caregiver with skip generation proportion in the household
+  if (!(file.exists(file.path(in.dir, 'grandparents', paste0('ACS_househould_margins_error.csv')))))
+  {
+    # load the ACS data
+    combine_acs_househould_with_ci(in.dir)
+  }
+  data <- as.data.table(read.csv(file.path(in.dir, 'grandparents', paste0('ACS_househould.csv'))))
+  # pc: percent distribution of grandparents responsible for grandchildren
+  dg <- data[id == 'Total_pc', list(lab.name,Male,Female,Total,sg,year)]
+  # compute for the female, male values
+  dg[, cat:= 'primary caregiver']
+  dg[, age := '30+']
+  dg[, Male := as.numeric(gsub('%', '', Male))]
+  dg[, Female := as.numeric(gsub('%', '', Female))]
+  # sg: householder or spouse responsible for grandchildren with no parents of grandchildren present
+  dg[, sg := as.numeric(gsub('%', '', sg))]
+  dg[, Total := as.numeric(gsub(',', '', Total))]
+  setnames(dg, 'lab.name', 'state')
+  dg[, race.eth := 'All']
+  # delete the abnormal state name in year 2011 United States Virgin Islands
+  # delete the national U.S.
+  dg <- dg[!grepl('United States Virgin Islands', state)]
+  dg <- dg[state != 'Puerto Rico']
+  # dg <- dg[!grepl('United States', state)]
+
+  # remove none U.S. states
+  dg <- dg[!is.na(Total)]
+  # impute for other years
+  tmp <- dg[year == 2010]
+  for (imp.yr in (2000-17):2009)
+  {
+    tmp[, year := imp.yr]
+    dg <- rbind(tmp, dg, use.names = T, fill = T)
+  }
+  dt.grandp <- copy(dg)
+  # # now we impute the data for year 2022, and we assume the data in year 2022 is the same as in year 2021
+  # tmp <- dg[year == 2021]
+  # tmp[, year := 2022]
+  # dg <- rbind(dg, tmp, use.names = T, fill = T)
+
+  if (rep.nb != 1)
+  {
+    set.seed(rep.nb)
+    # load the margins of error from ACS
+    data <- as.data.table(read.csv(file.path(in.dir, 'grandparents', paste0('ACS_househould_margins_error.csv'))))
+    dg <- data[id == 'Total_pc', list(lab.name,Male,Female,Total,sg,year)]
+    # clean
+    dg[, Male := as.numeric(gsub(',', '', gsub('±', '', Male)))]
+    dg[, Female := as.numeric(gsub(',', '', gsub('±', '', Female)))]
+    dg[, Total := as.numeric(gsub(',', '', gsub('±', '', Total)))]
+    dg[, sg := as.numeric(gsub(',', '', gsub('±', '', sg)))]
+
+    setnames(dg, c('lab.name', 'Male', 'Female', 'Total', 'sg'),
+             c('state', 'Male.ci', 'Female.ci', 'Total.ci', 'sg.ci'))
+    # delete the abnormal state name in year 2011
+    dg <- dg[!grepl('United States Virgin Islands', state)]
+    dg <- dg[state != 'Puerto Rico']
+
+    # remove none U.S. states
+    dg <- dg[!is.na(Total.ci)]
+
+    # impute for other years
+    tmp <- dg[year == 2010]
+    for (imp.yr in (2000-17):2009)
+    {
+      tmp[, year := imp.yr]
+      dg <- rbind(tmp, dg, use.names = T, fill = T)
+    }
+
+    # resample
+    # merge the margins of errors and estimates
+    # 90% confidence intervals
+    dt.grandp <- merge(dt.grandp, dg, by = c('state', 'year'), all = T)
+    dt.grandp[, male.prop := rnorm(nrow(dg), mean = Male, sd = Male.ci/1.64)]
+    dt.grandp[, female.prop := rnorm(nrow(dg), mean = Female, sd = Female.ci/1.64)]
+    dt.grandp[, total.prop := rnorm(nrow(dg), mean = Total, sd = Total.ci/1.64)]
+    dt.grandp[, sg.prop := rnorm(nrow(dg), mean = sg, sd = sg.ci/1.64)]
+    # rescale to the 100%
+    dt.grandp[, Male := male.prop / (male.prop + female.prop)*100]
+    dt.grandp[, Female := female.prop / (male.prop + female.prop)*100]
+
+    dt.grandp <- dt.grandp[, list(state,year,Male,Female,total.prop,sg.prop,cat,age,race.eth)]
+    setnames(dt.grandp, c('total.prop', 'sg.prop'), c('Total', 'sg'))
+
+  }
+
+  dt.grandp[, cg_female := Total * (Female/100)]
+  dt.grandp[, cg_male := Total * (Male/100)]
+
+  rep.dir <- paste0('rep_grandp-', rep.nb)
+  if (!dir.exists(file.path(in.dir, 'grandparents', rep.dir)))
+  {
+    dir.create(file.path(in.dir, 'grandparents', rep.dir))
+  }
+  cat(paste0('\nSaving ACS primary caregiver grandparents household dataset at national / state level to dir', rep.dir, '\n'))
+  write.csv(dt.grandp, file.path(in.dir, 'grandparents', rep.dir, paste0('skip_generation_state_national_total_pg_summary.csv')), row.names = F)
+
+  # compute sample the pg providing the responsible care
+  dt.grandp[, cg_female := Total * (Female/100) * (sg/100)]
+  dt.grandp[, cg_male := Total * (Male/100) * (sg/100)]
+  dt.grandp[, cat:= 'custodial grandparents']
+
+  cat(paste0('\nSaving custodial ACS grandparents household dataset at national / state level to dir', rep.dir, '\n'))
+  write.csv(dt.grandp, file.path(in.dir, 'grandparents', rep.dir, paste0('skip_generation_state_national_custodial_summary.csv')), row.names = F)
+
+}
+
+get_grandp_household_cg_national_race_ACS_ci_sep <- function(in.dir, rep.nb)
+{
+  if (!(file.exists(file.path(in.dir, 'grandparents', paste0('ACS_househould_margins_error.csv')))))
+  {
+    # load the ACS data
+    combine_acs_househould_with_ci(in.dir)
+  }
+  data <- as.data.table(read.csv(file.path(in.dir, 'grandparents', paste0('ACS_househould.csv'))))
+  dg <- data[id == 'Total_pc']
+  set(dg, NULL, c('state.name.id', 'row.nb', 'label'), NULL)
+  # compute for the female, male values
+  dg[, cat:= 'primary caregiver']
+  dg[, age := '30+']
+  dg[, Male := as.numeric(gsub('%', '', Male))]
+  dg[, Female := as.numeric(gsub('%', '', Female))]
+  dg[, Total := as.numeric(gsub(',', '', Total))]
+  dg[, Hispanic := as.numeric(gsub('%', '', Hispanic))]
+  # sg: householder or spouse responsible for grandchildren with no parents of grandchildren present (custodial)
+  dg[, sg := as.numeric(gsub('%', '', sg))]
+
+  # get the total number of skip generation, i.e. grandparents in the household
+  # delete the abnormal state name in year 2011 United States Virgin Islands
+  # delete the national U.S.
+  dg <- dg[!grepl('United States Virgin Islands', lab.name)]
+  dg <- dg[lab.name != 'Puerto Rico']
+  # dg <- dg[grepl('United States', lab.name)]
+
+  # remove none U.S. states
+  dg <- dg[!is.na(Total)]
+
+  dg <- as.data.table(reshape2::melt(dg, id = c('lab.name', 'year', 'cat', 'age', 'Hispanic', 'Male', 'Female', 'Total', 'sg', 'id')))
+  dg[, value := as.numeric(gsub('%', '', value))]
+  setnames(dg, c('Hispanic', 'variable', 'value'), c('eth.prop', 'race', 'race.prop'))
+
+  # impute for other years
+  tmp <- dg[year == 2010]
+  for (imp.yr in (2000-17):2009)
+  {
+    tmp[, year := imp.yr]
+    dg <- rbind(tmp, dg, use.names = T, fill = T)
+  }
+
+  dt.grandp <- copy(dg)
+  # # now we impute the data for year 2022, and we assume the data in year 2022 is the same as in year 2021
+  # tmp <- dg[year == 2021]
+  # tmp[, year := 2022]
+  # dg <- rbind(dg, tmp, use.names = T, fill = T)
+
+  if (rep.nb != 1)
+  {
+    set.seed(rep.nb)
+    # load the margins of error from ACS
+    data <- as.data.table(read.csv(file.path(in.dir, 'grandparents', paste0('ACS_househould_margins_error.csv'))))
+    dg <- data[id == 'Total_pc']
+
+    set(dg, NULL, c('state.name.id', 'row.nb', 'label'), NULL)
+
+    # get the total number of skip generation, i.e. grandparents in the household
+    # delete the abnormal state name in year 2011 United States Virgin Islands
+    # delete the national U.S.
+    dg <- dg[!grepl('United States Virgin Islands', lab.name)]
+    dg <- dg[lab.name != 'Puerto Rico']
+    # dg <- dg[grepl('United States', lab.name)]
+
+    # compute for the female, male values
+    dg[, Male := as.numeric(gsub(',', '', gsub('±', '', Male)))]
+    dg[, Female := as.numeric(gsub(',', '', gsub('±', '', Female)))]
+    dg[, Total := as.numeric(gsub(',', '', gsub('±', '', Total)))]
+    dg[, Hispanic := as.numeric(gsub(',', '', gsub('±', '', Hispanic)))]
+    dg[, sg := as.numeric(gsub(',', '', gsub('±', '', sg)))]
+
+    # remove none U.S. states
+    dg <- dg[!is.na(Total)]
+
+    dg <- as.data.table(reshape2::melt(dg, id = c('lab.name', 'year', 'Hispanic', 'Male', 'Female', 'Total', 'sg', 'id')))
+    dg[, value := as.numeric(gsub(',', '', gsub('±', '', value)))]
+
+    setnames(dg,
+             c('Male', 'Female', 'Total', 'Hispanic', 'variable', 'value', 'sg'),
+             c('Male.ci', 'Female.ci', 'Total.ci', 'eth.prop.ci', 'race', 'race.prop.ci', 'sg.ci'))
+
+    # impute for other years
+    tmp <- dg[year == 2010]
+    for (imp.yr in (2000-17):2009)
+    {
+      tmp[, year := imp.yr]
+      dg <- rbind(tmp, dg, use.names = T, fill = T)
+    }
+
+    # resample
+    # merge the margins of errors and estimates
+    dt.grandp <- merge(dt.grandp, dg, by = c('lab.name', 'year', 'race'), all = T)
+    tmp.dg <- unique(dt.grandp[, list(lab.name, cat, age, year, eth.prop, eth.prop.ci, sg, sg.ci, Male,Female,Total,Male.ci,Female.ci,Total.ci)])
+    tmp.dg[, male.prop := rnorm(nrow(tmp.dg), mean = Male, sd = Male.ci/1.64)]
+    tmp.dg[, female.prop := rnorm(nrow(tmp.dg), mean = Female, sd = Female.ci/1.64)]
+    tmp.dg[, total.prop := rnorm(nrow(tmp.dg), mean = Total, sd = Total.ci/1.64)]
+    tmp.dg[, eth.prop.samp := rnorm(nrow(tmp.dg), mean = eth.prop, sd = eth.prop.ci/1.64)]
+    tmp.dg[, sg.prop := rnorm(nrow(tmp.dg), mean = sg, sd = sg.ci/1.64)]
+
+    tmp.dg <- tmp.dg[, list(lab.name,cat,age,year,male.prop,female.prop,total.prop,eth.prop.samp,sg.prop)]
+
+    setnames(tmp.dg, c('male.prop','female.prop','total.prop','eth.prop.samp'),
+             c('Male', 'Female', 'Total.smp', 'eth.prop'))
+
+    # make sure to use the same total number
+    dt.grandp <- merge(dt.grandp, tmp.dg[, list(lab.name, year, Total.smp)], by = c('lab.name', 'year'), all = T)
+
+    dt.grandp[, male.prop := rnorm(nrow(dg), mean = Male, sd = Male.ci/1.64)]
+    dt.grandp[, female.prop := rnorm(nrow(dg), mean = Female, sd = Female.ci/1.64)]
+
+    dt.grandp[, race.prop.samp := rnorm(nrow(dg), mean = race.prop, sd = race.prop.ci/1.64)]
+    dt.grandp[race.prop.samp <= 0, race.prop.samp := race.prop]
+
+    # adj to ensure the sum of 1
+    dt.grandp[, Male := male.prop / (male.prop + female.prop)*100]
+    dt.grandp[, Female := female.prop / (male.prop + female.prop)*100]
+    tmp <- unique(dt.grandp[, list(lab.name, year, race, race.prop.samp)])
+    tmp <- tmp[, list(race.prop.samp.t = sum(race.prop.samp, na.rm = T)),
+               by = c('lab.name', 'year')]
+    dt.grandp <- merge(dt.grandp, tmp, by = c('lab.name', 'year'), all.x = T)
+    dt.grandp[, race.prop := race.prop.samp / race.prop.samp.t*100]
+
+    #
+    dt.grandp <- dt.grandp[, list(lab.name,year,Male,Female,Total.smp,
+                                  cat,age,race,race.prop)]
+
+    dt.grandp <- merge(dt.grandp, unique(tmp.dg[, list(lab.name,year,eth.prop,sg.prop)]), by = c('lab.name', 'year'), all.x = T)
+    dt.grandp[, eth.prop := 100 - eth.prop]
+    tmp.dg[, race := 'Hispanic']
+    tmp.dg[, race.prop := 100]
+    dt.grandp <- rbind(tmp.dg, dt.grandp, use.names = T, fill = T)
+    setnames(dt.grandp, c('Total.smp', 'sg.prop'), c( 'Total', 'sg'))
+  }
+
+  #
+  if (rep.nb == 1)
+  {
+    tmp.dg <- unique(dt.grandp[, list(lab.name, year, cat, age, eth.prop, Male, Female, Total, sg, id)])
+    tmp.dg[, race := 'Hispanic']
+    tmp.dg[, race.prop := 100]
+    dt.grandp[, eth.prop := 100 - eth.prop]
+    dt.grandp <- rbind(tmp.dg, dt.grandp, use.names = T, fill = T)
+  }
+
+  dt.grandp[, cg_female := Total * (Female/100) * (eth.prop/100) * (race.prop/100)]
+  dt.grandp[, cg_male := Total * (Male/100) * (eth.prop/100) * (race.prop/100)]
+
+  # combine race/eth: add Native Hawaiian/PI to NH Asian
+  dt.grandp[, race := gsub('\\.', ' ', race)]
+  unique(dt.grandp$race)
+  dt.grandp[, race := gsub('Non Hispanic', 'Non-Hispanic', race)]
+  dt.grandp[race %in% c('Non-Hispanic More than one race', 'Unknown'), race := 'Others']
+  dt.grandp[race == 'Non-Hispanic Native Hawaiian or Other Pacific Islander', race := 'Non-Hispanic Asian']
+
+  setnames(dt.grandp, 'race', 'race.eth')
+  setnames(dt.grandp, 'lab.name', 'state')
+  dt.grandp <- dt.grandp[, list(cg_female = sum(cg_female, na.rm = T),
+                                cg_male = sum(cg_male, na.rm = T)),
+                         by = c('state','race.eth','cat','age','year', 'Total', 'sg')]
+
+  rep.dir <- paste0('rep_grandp-', rep.nb)
+  if (!dir.exists(file.path(in.dir, 'grandparents', rep.dir)))
+  {
+    dir.create(file.path(in.dir, 'grandparents', rep.dir))
+  }
+  cat(paste0('\nSaving ACS grandparents household dataset at national race level to dir', rep.dir, '\n'))
+  write.csv(dt.grandp, file.path(in.dir, 'grandparents', rep.dir, paste0('skip_generation_national_raceth_total_pc_summary.csv')), row.names = F)
+
+  # compute sample the pg providing the responsible care
+  dt.grandp[, cg_female := cg_female * (sg/100)]
+  dt.grandp[, cg_male := cg_male * (sg/100)]
+  dt.grandp[, cat:= 'custodial grandparents']
+
+  cat(paste0('\nSaving ACS grandparents household dataset at national race level to dir', rep.dir, '\n'))
+  write.csv(dt.grandp, file.path(in.dir, 'grandparents', rep.dir, paste0('skip_generation_national_raceth_custodial_summary.csv')), row.names = F)
+
+
 }

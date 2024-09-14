@@ -233,6 +233,170 @@ process_nb_orphans_table_state_national_all_year_poission_rnk <- function(in.dir
   write.csv(sc.all, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('grandparents_deaths_loss_', cur.yr, '.csv')), row.names = F)
 }
 
+# 240724 update
+process_nb_orphans_grandp_loss_by_types_table_state_national_all_year_poission_rnk <- function(in.dir, prj.dir, cur.yr, type.input, resample.dir, rep.nb, d.death, deaths.pre, pop.harzard.dir, sel.nb, if.smooth, v.name, folder.name)
+{
+  d_deaths <- as.data.table(d.death)
+  d_deaths <- d_deaths[race.eth != 'Others']
+  states <- unique(d_deaths$state)
+  rcat <- unique(d_deaths$race.eth)
+  # exclude some groups we don't have complete data for
+  rcat <- rcat[!(grepl("More than" ,rcat) | grepl("Unknown",rcat) | grepl('Other', rcat))]
+
+  if (type.input == 'state_race')
+  {
+    rcat <- rcat[!(grepl("Other" ,rcat) | grepl("Unknown",rcat))]
+
+  }
+  k <- 0
+  ds.age <- vector('list', length(unique(states)) * length(unique(rcat))) # storing the nb of cg loss considering double orphans
+  part.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
+  sc.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
+  sc <- vector('list', length(unique(states)) * length(unique(rcat)))
+
+  for (s in states)
+  {
+    for (r in rcat)
+    {
+      # process the orphans by age of adults ----
+      k <- k + 1
+      tmp <- d_deaths[state == s & race.eth == r]
+      d.deaths.pre <- deaths.pre[state == s & race.eth == r]
+      # if due to suppression issue, the subset table contains no data, then we skip that
+      if (nrow(tmp) > 0)
+      {
+        group <- paste0("usa","_",gsub(' ','-',cur.yr),"_", gsub(' ','-',s),"_",gsub(' ','-',r))
+        cat('Processing orphans by age of parents in file: ', group, ' ...\n')
+        # out <- process_orphans_usa_state_national_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
+        # dor[[k]] <- out$d_age
+        #
+        cat('Processing orphans by age of children ...\n')
+        out.age <- process_orphans_with_age_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
+
+        tp <- tmp[age %in% c("30-34", "35-39", "40-44", "45-49",
+                             "50-54", "55-59", "80-84", "60-64",
+                             "65-69", "70-74" ,"75-79",
+                             "85+")]
+        if (nrow(tp) > 0 )
+        {
+          # process the children lost grandparents ----
+          cat('Processing caregiver loss ...\n')
+          # v0925 add grandp ci
+          grandp <- process_sep_type_grandp_loss_usa_single_state_national_all_year_ci(tmp, in.dir, resample.dir, rep.nb, cur.yr, type.input, group,s,r)
+          sc[[k]] <- grandp
+
+          # adjust for the number of caregiver loss, considering the double loss, removing the orphans counted in previous years
+          # won't consider the double grandparent caregivers loss
+          cat('Processing double orphans in the current year and removing counted orphans in the previous year ...\n')
+          tmp <- compute_double_orphans_all_causes_all_year_poission_rnk(in.dir, prj.dir, type.input, group, out.age$d_age, d.deaths.pre, pop.harzard.dir, v.name)
+          part.age[[k]] <- tmp$d.out
+
+          # combine number of caregiver loss and orphans regardless of the age of children
+          cat('Combining number of deaths and orphans regardless of the age of children ...\n')
+          orphanhood_format_clean(in.dir, prj.dir, type.input, group, out.age$d_age, tmp$data.double,v.name)
+          }
+      }
+    }
+  }
+  # save the age distribution of children based on maternal; paternal orphanhood of parents >= 30 years
+  tmp.age <- data.table::rbindlist( part.age, use.names = T, fill = T )
+  # grandp loss by all types
+  sc.all <- data.table::rbindlist( sc, use.names = T, fill = T )
+
+  cat('Saving nb of orphans by age of children by state ...\n')
+  write.csv(tmp.age, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('parents_deaths_orphans_with_age_summary_', cur.yr, '.csv')), row.names = F)
+  cat('Saving nb of cg loss ...\n')
+  write.csv(sc.all, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('grandparents_all_types_deaths_loss_', cur.yr, '.csv')), row.names = F)
+}
+
+# 240725 update, including double-counting for grandparents
+process_adj_nb_orphans_grandp_loss_by_types_table_state_national_all_year_poission_rnk <- function(in.dir, prj.dir, cur.yr, type.input, resample.dir, rep.nb, d.death, deaths.pre, p.one.house, pop.harzard.dir, sel.nb, if.smooth, v.name, folder.name)
+{
+  d_deaths <- as.data.table(d.death)
+  d_deaths <- d_deaths[race.eth != 'Others']
+  states <- unique(d_deaths$state)
+  rcat <- unique(d_deaths$race.eth)
+  # exclude some groups we don't have complete data for
+  rcat <- rcat[!(grepl("More than" ,rcat) | grepl("Unknown",rcat) | grepl('Other', rcat))]
+
+
+  if (type.input == 'state_race')
+  {
+    rcat <- rcat[!(grepl("Other" ,rcat) | grepl("Unknown",rcat))]
+
+  }
+  k <- 0
+  # ds.age <- vector('list', length(unique(states)) * length(unique(rcat))) # storing the nb of cg loss considering double orphans
+  part.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
+  # sc.age <- vector('list', length(unique(states)) * length(unique(rcat))) #storing the nb of children  based on ranking causes
+  sc <- vector('list', length(unique(states)) * length(unique(rcat)))
+
+  for (s in states)
+  {
+    for (r in rcat)
+    {
+      # process the orphans by age of adults ----
+      k <- k + 1
+      tmp <- d_deaths[state == s & race.eth == r]
+      d.deaths.pre <- deaths.pre[state == s & race.eth == r]
+
+      # compute for the average mortality rates, for double-counting of gp cg loss
+      d_deaths.gp <- tmp[!(sex == 'Female' & age %in% c("65-69", "70-74", "75-79",
+                                                             "80-84", "85+" ))]
+      d_deaths.gp <- d_deaths.gp[, list(deaths = sum(deaths, na.rm = T)),
+                                 by = c('sex', 'race.eth', 'state', 'year')]
+
+      # if due to suppression issue, the subset table contains no data, then we skip that
+      if (nrow(tmp) > 0)
+      {
+        group <- paste0("usa","_",gsub(' ','-',cur.yr),"_", gsub(' ','-',s),"_",gsub(' ','-',r))
+        cat('Processing orphans by age of parents in file: ', group, ' ...\n')
+        # out <- process_orphans_usa_state_national_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
+        # dor[[k]] <- out$d_age
+        #
+        cat('Processing orphans by age of children ...\n')
+        out.age <- process_orphans_with_age_all_year(tmp, in.dir, prj.dir, group, s, r, folder.name)
+
+
+        tp <- tmp[age %in% c("30-34", "35-39", "40-44", "45-49",
+                             "50-54", "55-59", "80-84", "60-64",
+                             "65-69", "70-74" ,"75-79",
+                             "85+")]
+        if (nrow(tp) > 0 )
+        {
+          # process the children lost grandparents ----
+          cat('Processing caregiver loss ...\n')
+          # v0925 add grandp ci
+          gp.data <- process_sep_type_grandp_loss_usa_single_state_national_all_year_ci(tmp, in.dir, resample.dir, rep.nb, cur.yr, type.input, group,s,r)
+          # sc[[k]] <- grandp
+
+          # 240725 considering the double-counting
+          sc[[k]] <- compute_double_counting_all_causes_sep_type_grandp_loss(d_deaths.gp, gp.data, p.one.house, in.dir, resample.dir, pop.harzard.dir, rep.nb, cur.yr, type.input, country,s,r)
+
+          # adjust for the number of caregiver loss, considering the double loss, removing the orphans counted in previous years
+          # won't consider the double grandparent caregivers loss
+          cat('Processing double orphans in the current year and removing counted orphans in the previous year ...\n')
+          tmp <- compute_double_orphans_all_causes_all_year_poission_rnk(in.dir, prj.dir, type.input, group, out.age$d_age, d.deaths.pre, pop.harzard.dir, v.name)
+          part.age[[k]] <- tmp$d.out
+
+          # combine number of caregiver loss and orphans regardless of the age of children
+          cat('Combining number of deaths and orphans regardless of the age of children ...\n')
+          orphanhood_format_clean(in.dir, prj.dir, type.input, group, out.age$d_age, tmp$data.double,v.name)
+        }
+      }
+    }
+  }
+  # save the age distribution of children based on maternal; paternal orphanhood of parents >= 30 years
+  tmp.age <- data.table::rbindlist( part.age, use.names = T, fill = T )
+  # grandp loss by all types
+  sc.all <- data.table::rbindlist( sc, use.names = T, fill = T )
+
+  cat('Saving nb of orphans by age of children by state ...\n')
+  write.csv(tmp.age, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('parents_deaths_orphans_with_age_summary_', cur.yr, '.csv')), row.names = F)
+  cat('Saving nb of cg loss ...\n')
+  write.csv(sc.all, file.path(prj.dir, 'results', paste0(type.input, '_', v.name), paste0('grandparents_all_types_deaths_loss_', cur.yr, '.csv')), row.names = F)
+}
+
 combine_caregiver_loss_all_year_clean <- function(in.dir, prj.dir, type.input, country, data, data.double, grandp.age, v.name)
 {
   # skip generations
@@ -338,18 +502,6 @@ process_nb_orphans_only_table_state_race_national_all_year_poission_rnk <- funct
 
 orphanhood_format_clean <- function(in.dir, prj.dir, type.input, country, data, data.double, v.name)
 {
-  # # skip generations
-  # # grand_parents <- as.data.table(grandp.age)
-  # # living in the same household
-  # grand_parents$gender <- tolower(grand_parents$gender)
-  # grand_parents$gender <- ifelse(grand_parents$gender == "f", "female",
-  #                                ifelse(grand_parents$gender == "m", "male", grand_parents$gender))
-  #
-  # # won't consider the double orphans of grandparent caregivers loss
-  # grand_parents <- as.data.table(reshape2::dcast(grand_parents, cause.name+child_age~gender, value.var = 'grandp.loss.age'))
-  # setnames(grand_parents, c('female', 'male'), c("grandmother", "grandfather"))
-  # setnames(grand_parents, 'child_age', 'child.age')
-
   # orphans
   if (!('race.eth' %in% colnames(data)))
   {

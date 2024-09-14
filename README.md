@@ -31,7 +31,7 @@ Imperial makes no representation or warranty about the accuracy or completeness 
 ## Citation
 Please cite this work as 
 
-Villaveces, A., Chen, Y., Tucker, S., Blenkinsop, A., Cluver, L., Sherr, L., ... & Ratmann, O. (2024). Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study. medRxiv, 2024-03.
+Villaveces, A., Chen, Y. ... & Ratmann, O. (2024). Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study. medRxiv, 2024-03.
 
 ## Acknowledgements
 We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS especially Dr. Robert Anderson for his helpful suggestions on interpreting and classifying disease groups and race groups using existing NCHS data. We also thank Prof. Chris Desmond for his comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the Moderna Charitable Foundation (to OR); the World Health Organisation (to SF); the Engineering and Physical Sciences Research Council (EPSRC) through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy); the Imperial College London President’s PhD Scholarship fund to YC; Imperial College London Undergraduate Research Bursaries to LG and VKM; and London Mathematical Society Undergraduate Research Bursary to DW (URB-2023-86). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript. The findings and conclusions in this report are those of the author(s) and do not necessarily represent the official position of the Centers for Disease Control and Prevention. 
@@ -55,8 +55,7 @@ source activate all_causes_deaths
 ```
 
 ## Reproducing our Analyses
-All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All raw data for this paper were stored in [Zenodo]. Link to Zenodo will be updated soon.
-
+All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All raw data for this paper were stored in [Zenodo](https://zenodo.org/records/11423744).
 
 ### Preprocessing steps
 #### Mortality data
@@ -68,8 +67,8 @@ The raw data can be requested from [Mortality Data - NCHS Vital Statistics porta
 To preprocess the mortality data from the line-list NCHS dataset online, we suggested the following steps:
 
 1. run script `/scripts_death/get_deaths_nchs.R` to auto-download mortality dataset for each year from 1983. 
-2. run script `/scripts_death/get_all_nchs_deaths_1983-2021.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
-Then mortality data were obtained at the group level in each year in `/data/NCHS/death/output/`. 
+2. run script `/scripts_death/get_all_nchs_deaths_1983-2021.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. We provided the mapping table from ICD-9 to ICD-10, and the comparability ratios in `/data/NCHS/comp_ratio/comparability_ratio_ICD9-10.csv`.
+Then mortality data will be preprocessed at the group level in `/data/NCHS/death/output/Allcause_deaths_1983-2021.RDS`. We also provided this preprocessed data file in Zenodo 
 
 To add Poisson noise on the morality data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked mortality data with Poisson noise following steps:
 
@@ -85,17 +84,18 @@ To add Poisson noise on the morality data and obtain the sorted sampled data, we
 
 4. For state by race & ethnicity level analysis using CDC WONDER data exclusively: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_mort_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_CDC_mort_state_race_data.R` to rank the sampled mortality data at the state by race & ethnicity level and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
 
+Processing mortality data of children stratified by single age, please use script `/scripts_death/get_all_nchs_deaths_child.R` to preprocess the death count at the race & ethnicity level from all-cause-death back to 1983. Then the corresponding data would be in `/data/NCHS/death_child/output/NCHS_deaths_children_1983-2021.RDS`. To preprocess the death count at the state level, raw data is in `/data/CDC/` and suppressed cells were imputed by 2. 
 
 #### Natality data
 We pulled and preprocessed line-list natality data from [National Center for Health Statistics (NCHS)](https://www.cdc.gov/nchs/data_access/vitalstatsonline.htm). Due to publicly unavailable from NCHS after 2005, the U.S. state-specific natality data were extrated from [CDC WONDER](https://wonder.cdc.gov/natality.html).
 
-The line-list natality  data can be requested from [Natality Birth Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data) and group-level data can be requested from [CDC WONDER interactive page](https://wonder.cdc.gov/natality.html). Mortality data extracted from CDC WONDER are provided in `/data/birth`.
-We also cleaned line-list natality data and provided the dataset at the group level in `data/NCHS/births/output/births_1968-2021.RDS`. The raw data can be requested from [Natality Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data).
+The line-list natality  data can be requested from [Natality Birth Data - NCHS Vital Statistics portal](https://www.nber.org/research/data/vital-statistics-natality-birth-data) and group-level data can be requested from [CDC WONDER interactive page](https://wonder.cdc.gov/natality.html). Natality data extracted from CDC WONDER are provided in `/data/birth`.
 
-If users want to preprocess the natality data from the line-list dataset online, we suggested the following steps:
+To preprocess the natality data from the line-list dataset online, we suggested the following steps:
 
 1. run script `/scripts_births/get_births_nchs.R` to auto-download natality dataset for each year from 1968. 
 2. run script `/scripts_births/process_births_all_years.R` to clean the individual level data, mapping the detailed age, race, Hispanic origins etc groups to the categories we used in paper. 
+Then natality data will be preprocessed at the group level in each year in `/data/NCHS/births/output/births_1968-2021.RDS`. We also provided this data set in Zenodo. 
 
 To add Poisson noise on the natality data and obtain the sorted sampled data, we suggested users to use job submittion script to sample ranked natality data with Poisson noise following steps:
 
@@ -119,9 +119,9 @@ To add Poisson noise on the population data and obtain the sorted sampled data, 
 2. For state by race & ethnicity level analysis: please use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$rank_cdc_pop_state_race_data` as 1. The job will automatically run script `/scripts_ranking/ranking_sampled_pop_state_race_data.R` to rank the sampled population data at the state level by race & ethnicity and save the data randomly into folder based on the pre-generated mapping matrix (in script `/scripts_ranking/ranking_method_function.R`).
 
 #### Household data
-We extracted the yearly number of grandparent caregivers from United States Census Bureau data source dashboard. For example, data in 2019 can be accessed from [2019: ACS 5-Year Estimates Subject Tables](https://data.census.gov/table/ACSST5Y2019.S1002). The estimated household data with margin of errors are also provided. We pulled the corresponding information at the national level by race & ethnicity; state level and state level by race & ethnicity in folder `data/grandparents/raw_ci`.
+We extracted the yearly number of grandparent caregivers from United States Census Bureau data source dashboard. For example, data in 2019 can be accessed from [2019: ACS 5-Year Estimates Subject Tables](https://data.census.gov/table/ACSST5Y2019.S1002). The estimated household data with margin of errors are also provided. We pulled the corresponding information at the national level by race & ethnicity; state level and state level by race & ethnicity in folder `data/grandparents/raw`, with the corresponding provided marigin of errors in folder `data/grandparents/raw_ci`.
 
-To sample the household data from the online dashboard based on providing marginal of errors, we suggested to use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resampled_grandp_data` as 1. The job will automatically run script `/R/ACS_grandp_data_ci_save.R` to resample data based on the estimated mean and marginal of errors. The sample size should be pre-defined in the script `/ACS_grandp_data_ci_save.R`.
+To sample the household data from the online dashboard based on providing marginal of errors, we suggested to use script `start.me.hpc.R` to submit a job in the HPC, by assigning variable `args$run_analysis$resampled_grandp_data` as 1. The job will automatically run script `/R/ACS_grandp_data_ci_save.R` to resample data based on the estimated mean and marginal of errors. The sample size should be pre-defined in the script `/R/ACS_grandp_data_ci_save.R`.
 
 Other data sources were provided in the supplementary materials. 
 
@@ -140,15 +140,15 @@ Set argument `args$sample.nb`, the number of sampled datasets you want to use fo
 
 2. Orphanhood and all caregiver loss estimation at the national level by race & ethnicity
 
-To process the analysis, set `args$uncertainty_race_eth_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_national_race_poisson_rnk = 1`. 
+To process the analysis, set `uncertainty_race_eth_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. The corresponding postprocessing script is `R/CI_NCHS_historical_postprocessing_state_race_paper_0523.R`. To separate the grandparent caregiver loss into primary and secondary caregiver loss and adjust the grandparent caregiver loss removing the double-counting, please set `uncertainty_grandp_adj_race_eth_level_rep_resample_poisson_rnk_final = 1`. For the paper figures and tables, set `postprocessing_estimates_paper_plot_national_race_poisson_rnk_tab_fig = 1` which will automatically run script `/R/CI_NCHS_historical_postprocessing_national_race_paper_orphan_grandp_fig_tab.R`.  
 
 3. Orphanhood and all caregiver loss estimation at the state level
 
-To process the analysis, set `args$uncertainty_state_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_poisson_rnk = 1`.
+To process the analysis, set `uncertainty_state_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. The corresponding postprocessing script is `R/CI_NCHS_historical_postprocessing_state_paper_0523.R`. To separate the grandparent caregiver loss into primary and secondary caregiver loss and adjust the grandparent caregiver loss removing the double-counting, please set `uncertainty_state_level_rep_resample_poisson_rnk_grandp_diagg = 1`. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_grandp_sept_poisson_rnk = 1`, which will automatically run script `/R/CI_NCHS_historical_postprocessing_state_paper_orphan_grandp_fig_tab.R`.
 
 4. Orphanhood and all caregiver loss estimation at the state level by race and ethnicity
 
-To process the analysis, set `args$uncertainty_state_race_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson_rnk = 1`.
+To process the analysis, set `uncertainty_state_race_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_race_poisson_rnk = 1`.
 
 
 ### Sensitivity Analyses
@@ -159,12 +159,15 @@ To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp_0520.R`.
 
 2. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
 
-To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sensitivity_analysis_0527.R`.
+To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516_clean.R`.
 
 3. Sensitivity in national-level orphanhood estimates to potentially correlated fertility rates
 
-To process the analysis, set `race_eth_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516.R`.
+To process the analysis, set `race_eth_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516_clean.R`.
 
 4. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
 
-To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis_0527.R`.
+To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis_0527_clean.R`.
+
+Others:
+Data used in the legend: `/R/misc_legend_data_paper.R`

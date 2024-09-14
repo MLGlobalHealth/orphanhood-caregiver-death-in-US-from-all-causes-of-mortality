@@ -1,7 +1,6 @@
 # Get the quantiles ----
-# used for the national race & ethnicity level
-# and the state level
-# if.debug <- F
+# used for the state level to rescale the estimate to be consistent with the national level
+# run this one before we separate the grandp
 
 require(data.table)
 require(ggplot2)
@@ -76,66 +75,6 @@ source(file.path(args$prj.dir,"R","figures_state_paper.R"))
 # Colour for figures
 pl.tab <- readRDS(file.path(args$prj.dir, 'data', 'color_setting.RDS'))
 
-# prevalence function
-get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all, show.nb)
-{
-  # prevalence
-  data <- do.age.children.par.grand.all
-  data <- data[,lapply(.SD,function(x){ifelse(is.na(x),0,x)})]
-  setnames(data, 'cg.loss', 'all')
-  # reconstruct the data table
-  data <- data[, list(cause.name,state,child.age,race.eth,year,mother,father,orphans,grandp.loss,all)]
-  data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','state','race.eth','year')))
-
-  dt.cum <- list()
-  for (yr in unique(data$year))
-  {
-    tmp <- data[year <= yr]
-    tmp <- tmp[, cur.child.age := yr - year + child.age]
-    tmp <- tmp[, list(value = sum(value, na.rm = T)),
-               by = c('cause.name','state','race.eth','variable','cur.child.age','variable')]
-    tmp[, cur.yr := yr]
-    dt.cum[[yr]] <- tmp
-  }
-  dt.cum.all <- data.table::rbindlist( dt.cum, use.names = T, fill = T )
-  # get the rank number
-  dt.cum.all <- dt.cum.all[cur.yr >= (2000)]
-  dt.cum.all[, year := cur.yr]
-  dt.cum.all <- dt.cum.all[cur.child.age < 18]
-
-  # get the ranking for each cg loss type
-  preval.cat <- list()
-  for (cat.loss in unique(dt.cum.all$variable))
-  {
-    tmp <- get_ranking_id(dt.cum.all[variable == cat.loss], show.nb)
-    # show all causes as long as they appeared in the top
-    # if not in the leading list in some years, leading.causes = F
-    dt.cum.all.tmp <- dt.cum.all[variable == cat.loss]
-
-    preval.cat[[cat.loss]] <- merge(dt.cum.all.tmp, unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
-                                    by = c('state', 'year', 'cause.name','race.eth'), all.x = T)
-
-    preval.cat[[cat.loss]][, leading.causes := TRUE]
-    preval.cat[[cat.loss]][is.na(causes.state.id), leading.causes := FALSE]
-    preval.cat[[cat.loss]][, child.age.group := ifelse(cur.child.age %in% 0:4, '0-4',
-                                                       ifelse(cur.child.age %in% 5:9, '5-9',
-                                                              '10-17'))]
-
-    preval.cat[[cat.loss]] <- preval.cat[[cat.loss]][, list(value = sum(value, na.rm = T)),
-                                                     by = c( 'state', 'year', 'cause.name','race.eth', 'variable', 'leading.causes', 'child.age.group')]
-    preval.cat[[cat.loss]] <- merge(preval.cat[[cat.loss]], unique(tmp[, list(state,year,cause.name,race.eth,causes.state.id)]),
-                                    by = c('state', 'year', 'cause.name', 'race.eth'), all.x = T)
-    setkey(preval.cat[[cat.loss]], year, causes.state.id, state)
-    unique(preval.cat[[cat.loss]]$cause.name)
-
-  }
-  preval <- data.table::rbindlist( preval.cat, use.names = T, fill = T )
-  setnames(preval, 'variable', 'loss.type')
-  preval[, variable := "Prevalence"]
-  preval$cause.name <- gsub(' \\(', '\n(', preval$cause.name)
-  return(preval)
-}
-
 # scaling related function
 # get med value for state level scaling
 get_quantiles_estimates_med_state <- function(prj.dir, do, type.input, raw.type, summary.type.input)
@@ -147,12 +86,6 @@ get_quantiles_estimates_med_state <- function(prj.dir, do, type.input, raw.type,
   # update v240208: remove 'Other' race & ethnicity
   do.all.ci <- do.all.ci[race.eth != 'Others']
   do.all.ci[, race.eth := 'All']
-  # do.all.ci[, state := 'National']
-
-  # d.death <- unique(do.all.ci[, list(year,cause.name,state,race.eth,deaths,rep.nb)])
-  # d.death <- d.death[, list(deaths = sum(deaths, na.rm = T)),
-  #                    by = c('year','cause.name','state','race.eth','rep.nb')]
-  # set(d.death, NULL, 'rep.nb', NULL)
 
   # only get the estimates for mother, father, double_orphans, grandmother and grandfather
   do.all.ci <- do.all.ci[, list(year,cause.name,state,race.eth,
@@ -418,58 +351,58 @@ get_estimates_historical_state_multi_factor_sex <- function(prj.dir, race.type, 
 
       if (0)
       {
-      p <- ggplot(multi.pl, aes(x = year, y = adj.factor, col = variable)) +
-        geom_line() +
-        theme_bw() +
-        facet_wrap(.~re.name, ncol = 3) +
-        xlab('') +
-        ylab('Ratio of the estimates at the national level\nto the national standardized race & ethnicity level') +
-        labs(col = 'Type of the loss') +
-        guides(colour = guide_legend(
-          # title.position="top", title.hjust = 0.5,
-          nrow = 1)) +
+        p <- ggplot(multi.pl, aes(x = year, y = adj.factor, col = variable)) +
+          geom_line() +
+          theme_bw() +
+          facet_wrap(.~re.name, ncol = 3) +
+          xlab('') +
+          ylab('Ratio of the estimates at the national level\nto the national standardized race & ethnicity level') +
+          labs(col = 'Type of the loss') +
+          guides(colour = guide_legend(
+            # title.position="top", title.hjust = 0.5,
+            nrow = 1)) +
 
-        # guides(col = guide_legend(ncol = 1)) +
-        theme(legend.position = "bottom",
-              axis.title = element_text(size = 16),
-              axis.text = element_text(size=13, family='sans'),
-              text=element_text(size=16,family='sans'),
-              legend.title=element_text(size=15, family='sans'),
-              legend.text=element_text(size=13, family='sans'),
-              legend.key.size = unit(16, 'pt'),
-              strip.text = element_text(size = 16),
-              axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
+          # guides(col = guide_legend(ncol = 1)) +
+          theme(legend.position = "bottom",
+                axis.title = element_text(size = 16),
+                axis.text = element_text(size=13, family='sans'),
+                text=element_text(size=16,family='sans'),
+                legend.title=element_text(size=15, family='sans'),
+                legend.text=element_text(size=13, family='sans'),
+                legend.key.size = unit(16, 'pt'),
+                strip.text = element_text(size = 16),
+                axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
 
-              panel.background = element_blank(),
-              strip.background = element_blank()
-        )
+                panel.background = element_blank(),
+                strip.background = element_blank()
+          )
 
-      # p
-      ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_adjust_race_sex_adjustment.png'), p,  w = 18, h = 13)
-      ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_adjust_race_sex_adjustment.pdf'), p,  w = 18, h = 13)
+        # p
+        ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_adjust_race_sex_adjustment.png'), p,  w = 18, h = 13)
+        ggsave(file = file.path(prj.dir, 'results', 'figs', 'edf_state_adjust_race_sex_adjustment.pdf'), p,  w = 18, h = 13)
 
-      ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.png'), p,  w = 18, h = 13)
-      ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.pdf'), p,  w = 18, h = 13)
+        ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.png'), p,  w = 18, h = 13)
+        ggsave(file = file.path(prj.dir, 'results', type.input, 'supp_state_adjust_race_sex_adjustment.pdf'), p,  w = 18, h = 13)
 
       }
     }
   }
   if (0)
   {
-  # orphans who lost single parent due to the death
-  # we assume the multipliers are stable across age of children and U.S. states
-  do.state.raw <- merge(do.state.raw[variable != 'deaths'], multi[, list(year,variable,cause.name,adj.factor)], by = c('year', 'variable', 'cause.name'), all.x = T)
+    # orphans who lost single parent due to the death
+    # we assume the multipliers are stable across age of children and U.S. states
+    do.state.raw <- merge(do.state.raw[variable != 'deaths'], multi[, list(year,variable,cause.name,adj.factor)], by = c('year', 'variable', 'cause.name'), all.x = T)
 
-  do.state.raw[is.na(adj.factor) | adj.factor == 0, unique(value)]
-  do.state.raw[is.na(adj.factor) | adj.factor == 0, adj.factor := 1]
-  do.state.raw[, value.up := round(value/adj.factor)]
-  do.state.raw[value == 0 & is.na(value.up), value.up := 0]
+    do.state.raw[is.na(adj.factor) | adj.factor == 0, unique(value)]
+    do.state.raw[is.na(adj.factor) | adj.factor == 0, adj.factor := 1]
+    do.state.raw[, value.up := round(value/adj.factor)]
+    do.state.raw[value == 0 & is.na(value.up), value.up := 0]
 
-  do.state <- as.data.table(reshape2:: dcast(do.state.raw, year+cause.name+child.age+state+race.eth~variable, value.var = 'value.up'))
-  # do.state[!is.na(double_orphans)]
-  do.state <- merge(do.state, d.death, by = c('year', 'cause.name', 'state', 'race.eth'), all = T)
+    do.state <- as.data.table(reshape2:: dcast(do.state.raw, year+cause.name+child.age+state+race.eth~variable, value.var = 'value.up'))
+    # do.state[!is.na(double_orphans)]
+    do.state <- merge(do.state, d.death, by = c('year', 'cause.name', 'state', 'race.eth'), all = T)
 
-  write.csv(do.state, file.path(prj.dir, 'results', summary.type.input, paste0('hist_state_adj_sex_', race.type, stat.input,'_summary_cg_loss_age.csv')), row.names = F)
+    write.csv(do.state, file.path(prj.dir, 'results', summary.type.input, paste0('hist_state_adj_sex_', race.type, stat.input,'_summary_cg_loss_age.csv')), row.names = F)
   }
 }
 
@@ -550,7 +483,6 @@ if (
 
   infile <- list.files(file.path(args$prj.dir, 'results', type.input.state, 'initial_result'), pattern = paste0('summary_all'), full.names = TRUE, recursive=F)
   infiles <-  unlist(infile)
-  # infiles <- infiles[1:10]
   # all incidence estimates
   do <- list()
   # # all prevalence estimates without cause.name
@@ -583,243 +515,91 @@ if (
 }
 
 # Scaling the incidence to the magnitude of national level ----
-# if (
-#   !file.exists(
-#     file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
-#   )
-# )
-# {
-  cat('Processing for the multiplier factors to adj state level incidence')
-  # 0910
-  # get the quantitles for orphanhoods
-  # first load all the needed files and then filtered out the medium, the confidence intervals
+cat('Processing for the multiplier factors to adj state level incidence')
+# 0910
+# get the quantitles for orphanhoods
+# first load all the needed files and then filtered out the medium, the confidence intervals
 
-  # Loading all MCMC chains
-  do.all <- as.data.table(readRDS(file.path(args$out.dir, paste0('hist_', state.type, 'summary_incidence.rds'))))
+# Loading all MCMC chains
+do.all <- as.data.table(readRDS(file.path(args$out.dir, paste0('hist_', state.type, 'summary_incidence.rds'))))
 
 
-  cat('Process the 50% quantile estimates at state level...\n')
-  if (!file.exists(
-    file.path(args$out.dir, paste0('hist_',state.type, 'M_summary_cg_loss_age.csv'))
-  ))
-  {
-    # state level
-    get_quantiles_estimates_med_state(args$prj.dir, do.all, type.input.state, raw.type = state.type, summary.type.input)
-  }
+cat('Process the 50% quantile estimates at state level...\n')
+if (!file.exists(
+  file.path(args$out.dir, paste0('hist_',state.type, 'M_summary_cg_loss_age.csv'))
+))
+{
+  # state level
+  get_quantiles_estimates_med_state(args$prj.dir, do.all, type.input.state, raw.type = state.type, summary.type.input)
+}
 
-  cat('Process the multipliers...\n')
-  # if (!file.exists(
-  #   file.path(args$out.dir, paste0('state_adjust_race_sex_factor.csv'))
-  #   ))
-  {
-    # TODO: more thoughts for scaling...
-    # I used the same multipliers for CU, CL as that computed in M, for incidence estimates
-    # Then for the prevalence, I am thinking to first compute the multipliers before and after adjed by national estimamtes
-    # basically only for M, then use the same multipliers for CU and CL
+cat('Process the multipliers...\n')
+{
+  # first get the multipliers from M at the national level
+  get_estimates_historical_state_multi_factor_sex(args$prj.dir, race.type, v.name)
+}
 
-    # Alternatively, only use the incidence CU, CL to get the prevalence as a comparison of the UI...
-
-    # first get the multipliers from M at the national level
-    get_estimates_historical_state_multi_factor_sex(args$prj.dir, race.type, v.name)
-  }
-
-  # process for the incidence by iteration, then for the prevalence.
-  if (1)
-  {
-    do.preval.cause <- list()
-    do.adj <- list()
-
-    for (i in unique(do.all$rep.nb))
-    {
-      # first resalce the incidence
-      do <-  do.all[rep.nb == i]
-      cat(paste0('Adjusting the estimates for iteration ', i, '...\n'))
-
-      do.age.children.par.grand.all <- get_estimates_state_sex_adj_iter(args$prj.dir,args$out.dir, do, race.type, v.name)
-      # mother, father represent the maternal, parental orphanhoods
-      do.age.children.par.grand.all[, orphans := mother+father-double_orphans]
-      do.age.children.par.grand.all[, grandp.loss := grandfather+grandmother]
-      do.age.children.par.grand.all[, cg.loss := orphans+grandp.loss]
-      # save the scaled the incidence
-      do.adj[[i]] <- copy(do.age.children.par.grand.all)
-      do.adj[[i]][, rep.nb := i]
-
-      # get the prevalence file
-      do.preval.cause[[i]] <- get_preval_format_iter(do.age.children.par.grand.all, i)
-
-    }
-    cat('Saving the scaled incidence outputs...\n')
-    do.all.adj <- data.table::rbindlist( do.adj, use.names = T, fill = T )
-    # write.csv(do.all.adj, file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', paste0(state.type, 'sex_adj_', race.type), 'summary_incidence.csv')), row.names = F)
-    # write.csv(do.all.adj[rep.nb %in% c(1,2,3,4,5)], file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', paste0(state.type, 'sex_adj_', race.type), 'summary_incidence_test.csv')), row.names = F)
-
-    cat('Saving the scaled prevalence outputs...\n')
-    do.preval.all <- data.table::rbindlist( do.preval.cause, use.names = T, fill = T )
-    # write.csv(do.preval.all, file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', paste0(state.type, 'sex_adj_', race.type), 'summary_prevalence_cause.csv')), row.names = F)
-    # write.csv(do.preval.all[rep.nb %in% c(1,2,3,4,5)], file.path(args$prj.dir, 'results', summary.type.input, paste0('hist_', paste0(state.type, 'sex_adj_', race.type), 'summary_prevalence_cause_test.csv')), row.names = F)
-
-    # SAVING THE DATA
-    cat(paste0('Saving chains into ', args$out.dir, '\n'))
-    file.name <- file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
-    save(do.all.adj, do.preval.all, file = file.name)
-  }
-# }else{
-#   load(file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData')))
-#   get_quantiles_estimates_med_state_sex_adj(args$prj.dir, do.all.adj, type.input.state, raw.type = state.type, summary.type.input)
-# }
-
-# Figures and Tables for paper ----
+# process for the incidence by iteration, then for the prevalence.
 if (1)
 {
-  show.nb <- 5
-  pl.tab <- readRDS(file.path(args$prj.dir, 'data', 'color_setting.RDS'))
-  type.input <- summary.type.input
+  do.preval.cause <- list()
+  do.adj <- list()
 
-  pds.quantiles <- c(.025,.5,.975)
-  pds.quantilelabels <- c('CL','M','CU')
-
-  # Load pop data
-  if (!file.exists(file.path(args$prj.dir, 'data', 'data', 'pop', paste0('state', '_usa_children_population_all.csv'))))
+  for (i in unique(do.all$rep.nb))
   {
-    c.pop.state <- extract_child_pop_state_national(file.path(args$prj.dir, 'data'), 'state')
+    # first resalce the incidence
+    do <-  do.all[rep.nb == i]
+    cat(paste0('Adjusting the estimates for iteration ', i, '...\n'))
 
+    do.age.children.par.grand.all <- get_estimates_state_sex_adj_iter(args$prj.dir,args$out.dir, do, race.type, v.name)
+    # mother, father represent the maternal, parental orphanhoods
+    do.age.children.par.grand.all[, orphans := mother+father-double_orphans]
+    do.age.children.par.grand.all[, grandp.loss := grandfather+grandmother]
+    do.age.children.par.grand.all[, cg.loss := orphans+grandp.loss]
+    # save the scaled the incidence
+    do.adj[[i]] <- copy(do.age.children.par.grand.all)
+    do.adj[[i]][, rep.nb := i]
   }
-  c.pop.state <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'data', 'pop', paste0('state', '_usa_children_population_all.csv'))))
+  cat('Saving the scaled incidence outputs...\n')
+  do.all.adj <- data.table::rbindlist( do.adj, use.names = T, fill = T )
 
-  if(if.rnk){
-    do.inc <- copy(do.all.rnk)
-    do.prev <- copy(dt.cum.all)
-    # do.deaths <- copy(deaths.rnk)
-  }else{
-    do.inc <- copy(do.all.adj)
-    do.inc <- as.data.table(reshape2::melt(do.inc, id = c('year', 'cause.name', 'state', 'race.eth', 'child.age', 'rep.nb')))
-    do.prev <- copy(do.preval.all)
-    # do.deaths <- unique(do.all[, list(year,cause.name,race.eth,deaths,rep.nb)])
-  }
+  cat('Saving the scaled prevalence outputs...\n')
+  do.preval.all <- data.table::rbindlist( do.preval.cause, use.names = T, fill = T )
 
-  # EDF7 ----
-  # incidence
-  do.inc.total.raw <- do.inc[variable == 'orphans' & year == 2021, list(value = sum(value, na.rm = T)),
-                             by = c('year','rep.nb', 'variable', 'cause.name', 'state')]
+  # SAVING THE DATA
+  cat(paste0('Saving chains into ', args$out.dir, '\n'))
+  file.name <- file.path(args$out.dir, paste0('hist_', state.type, 'summary_adj_mcmc_chains.RData'))
+  save(do.all.adj, do.preval.all, file = file.name)
+}
 
-  do.inc.total <- do.inc.total.raw[,
-                                   list(
-                                     value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                     stat = pds.quantilelabels),
-                                   by = c('year','cause.name', 'variable', 'state')
-  ]
+# the additional analysis: granpd primary/secondary loss ----
+args$v.name <- 'V0523'
+args$sample.type <- 'poisson_sampling_rnk'
+rep.nb <- args$rep.nb
+set.seed(rep.nb)
+type.input <- 'state'
+args$out.dir <- file.path(args$prj.dir, 'results')
+args$in.dir <- file.path(args$prj.dir, 'data')
 
-  # prevalence
-  unique(do.prev$loss.type)
-  do.prev.total.raw <- do.prev[loss.type == 'orphans' & year == 2021, list(value = sum(value, na.rm = T)),
-                               by = c('year','rep.nb', 'loss.type', 'cause.name', 'state')]
-  do.prev.total <- do.prev.total.raw[,
-                                         list(
-                                           value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                           stat = pds.quantilelabels),
-                                         by = c('cause.name', 'loss.type', 'year', 'state')
-  ]
-  #
-  # add pop of children
-  do.inc.total <- merge(do.inc.total, c.pop.state, by = c('state', 'year'), all.x = T)
-  do.prev.total <- merge(do.prev.total, c.pop.state, by = c('state', 'year'), all.x = T)
+str(args)
+result.folder <- paste0('CI_', type.input, '_', args$sample.type, '_', args$v.name)
 
-  dt <- generate_edf7(do.inc.total[stat == 'M'], do.prev.total[stat == 'M'], args$out.dir)
-  cat('Done for EDF 7 ...\n')
-  cat('Saving data for EDF 7 to file ...\n')
-  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_edf7.RData')))
+load(file.path(
+  args$prj.dir, 'results', 'summary_output_main_V0523', 'hist_state_poisson_sampling_rnk_summary_adj_mcmc_chains.RData'
+))
 
-  # Table S13 ----
-  # to support EDF 7
-  # load(file = file.path(args$out.dir, paste0('data_tab13.RData')))
-  generate_table_S13(do.inc.total, do.prev.total, args$out.dir)
-  cat('Done for Supp Table13 ...\n')
-  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_tab13.RData')))
+if (!dir.exists(file.path(args$prj.dir, 'results', result.folder, 'adj_results')))
+{
+  dir.create(file.path(args$prj.dir, 'results', result.folder, 'adj_results'))
+}
+cat('\nSaving the results into file...\n')
+nb.range <- unique(do.all.adj$rep.nb)
+for (rep.nb.inp in nb.range)
+{
+  tmp <- do.all.adj[rep.nb == rep.nb.inp]
+  write.csv(tmp, file.path(args$prj.dir, 'results', result.folder,
+                           'adj_results', paste0(rep.nb.inp, '-hist_state_summary_all_cg_loss_age.csv')), row.names = F)
+  cat(paste0('\nSaved the results id ', rep.nb.inp, ' into file...\n'))
 
-  # Table S4, S5 ----
-  # for all types of caregiver loss
-  # incidence
-  do.inc.total.raw <- do.inc[year == 2021, list(value = sum(value, na.rm = T)),
-                             by = c('year','rep.nb', 'variable', 'state')]
-
-  do.inc.total <- do.inc.total.raw[,
-                                   list(
-                                     value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                     stat = pds.quantilelabels),
-                                   by = c('year', 'variable', 'state')
-  ]
-
-  # prevalence
-  unique(do.prev$loss.type)
-  do.prev.total.raw <- do.prev[year == 2021, list(value = sum(value, na.rm = T)),
-                               by = c('year','rep.nb', 'loss.type', 'state')]
-  do.prev.total <- do.prev.total.raw[,
-                                     list(
-                                       value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                       stat = pds.quantilelabels),
-                                     by = c('loss.type', 'year', 'state')
-  ]
-  #
-  # for total
-  do.inc.total.raw <- do.inc[year == 2021, list(value = sum(value, na.rm = T)),
-                             by = c('year','rep.nb', 'variable')]
-
-  do.inc.t <- do.inc.total.raw[,
-                                   list(
-                                     value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                     stat = pds.quantilelabels),
-                                   by = c('year', 'variable')
-  ]
-
-  # prevalence
-  unique(do.prev$loss.type)
-  do.prev.total.raw <- do.prev[year == 2021, list(value = sum(value, na.rm = T)),
-                               by = c('year','rep.nb', 'loss.type')]
-  do.prev.t <- do.prev.total.raw[,
-                                     list(
-                                       value = quantile(value, p = pds.quantiles, na.rm = TRUE),
-                                       stat = pds.quantilelabels),
-                                     by = c('loss.type', 'year')
-  ]
-  #
-  # add pop of children
-  do.inc.total <- rbind(do.inc.total, do.inc.t[, state := 'AAUS'])
-  do.prev.total <- rbind(do.prev.total, do.prev.t[, state := 'AAUS'])
-
-  c.pop.state.t <- c.pop.state[year == 2021, list(population = sum(population)), by = c('year', 'race.eth')]
-  c.pop.state <- rbind(c.pop.state[year == 2021], c.pop.state.t[, state := 'AAUS'])
-
-  do.inc.total <- merge(do.inc.total, c.pop.state, by = c('state', 'year'), all.x = T)
-  do.prev.total <- merge(do.prev.total, c.pop.state, by = c('state', 'year'), all.x = T)
-
-  # load(file = file.path(args$out.dir, paste0('data_S4s5.RData')))
-
-  generate_table_S4(do.inc.total, args$out.dir)
-  save(do.inc.total, do.prev.total, file = file.path(args$out.dir, paste0('data_S4s5.RData')))
-
-  generate_table_S5(do.prev.total, args$out.dir)
-
-  # check the total
-  # args$out.dir <- '/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/results/summary_output_main_V0523'
-
-  load(file = file.path(args$out.dir, paste0('data_S4s5.RData')))
-  do.inc.total <- do.inc.total[state != 'AAUS']
-  tmp <- do.inc.total[, list(value = sum(value, na.rm = T)), by = c('year', 'variable', 'stat', 'loss.type')]
-  pop <- do.inc.total[, list(population = sum(population, na.rm = T)), by = c('year', 'variable', 'stat', 'loss.type')]
-  tmp <- merge(tmp, pop, by = c('year', 'variable', 'stat', 'loss.type'), all = T)
-
-  tmp[, state := 'AAUS']
-  tmp[, race.eth := 'All']
-  do.inc.total <- rbind(do.inc.total, tmp)
-
-  do.prev.total <- do.prev.total[state != 'AAUS']
-  tmp <- do.prev.total[, list(value = sum(value, na.rm = T)), by = c('year', 'loss.type', 'stat', 'race.eth')]
-  pop <- do.prev.total[, list(population = sum(population, na.rm = T)), by = c('year', 'race.eth', 'stat', 'loss.type')]
-  tmp <- merge(tmp, pop, by = c('year', 'race.eth', 'stat', 'loss.type'), all = T)
-
-  tmp[, state := 'AAUS']
-  tmp[, race.eth := 'All']
-  do.prev.total <- rbind(do.prev.total, tmp)
-
-  }
+}
 cat('Done!\n')

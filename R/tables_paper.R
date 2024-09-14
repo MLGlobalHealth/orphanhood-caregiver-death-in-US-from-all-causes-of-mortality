@@ -48,11 +48,362 @@ generate_table1 <- function(do.inc.total.raw, do.prev.total.raw, c.pop.all, out.
   set(tab.prev, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
   openxlsx::write.xlsx(tab.prev, file = file.path(out.dir, paste0('Table1_National_US_prevalence_summary_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
                        rowNames = F)
+
   tmp <- rbind(tab.incid, tab.prev)
   capture.output(print(xtable::xtable(tmp), include.rownames=FALSE), file = file.path(out.dir, paste0('Table1_National_US_summary_for_paper_rnk', as.integer(if.rnk), '.txt')))
   cat('Done for the Table 1 with uncertainty intervals! \n')
 }
 
+# update
+generate_table1_pry_cg_types_old <- function(do.inc.total.raw, do.prev.total.raw, c.pop.all, out.dir, if.rnk)
+{
+  cat('Processing for Table 1 with all types of cg loss...\n')
+  sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
+  unique(do.inc.total.raw$variable)
+  # TODO select the variables!!!
+
+  tab.incid <- do.inc.total.raw[year %in% sel.yr & variable %in% c('cg.loss', 'orphans', 'pry.loss', 'secondary.loss')]
+  tab.incid[, variable := factor(variable, levels = c('cg.loss', 'orphans', 'pry.loss', 'secondary.loss'))]
+
+  # add child pop
+  tab.incid <- merge(tab.incid, c.pop.all, by = c('year'), all.x = T)
+  setnames(tab.incid, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tab.incid[, rate := value/pop.c*1e2]
+  tab.incid[, race.eth := 'All']
+  tab.incid <- process_summary_number_rate_change_with_ci_table(tab.incid)
+  # openxlsx::write.xlsx(tab.incid, file = file.path(args$prj.dir, 'results', type.input, 'CI_Table1_National_US_incidence_summary_for_paper.xlsx'),
+  #                      rowNames = F)
+  set(tab.incid, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  # tab.incid <- tab.incid[loss != 'grandp.loss']
+  openxlsx::write.xlsx(tab.incid, file = file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  # prevalence
+  tmp <- do.prev.total.raw[year %in% sel.yr]
+  setnames(tmp, 'loss.type', 'variable')
+  unique(tmp$variable)
+  tmp <- tmp[variable %in% c('all', 'orphans', 'pry.loss', 'secondary.loss')]
+  tmp[, race.eth := 'All']
+  tmp[, variable := factor(variable, levels = c('all', 'orphans', 'pry.loss', 'secondary.loss'))]
+
+  # add child pop
+  tmp <- merge(tmp, c.pop.all,
+               by = c('year'), all.x = T)
+  setnames(tmp, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tmp[, rate := value/pop.c*1e2]
+
+  # by race and ethnicity
+  tab.prev <- process_summary_number_rate_change_with_ci_table(tmp)
+  # tab.prev <- tab.prev[loss != 'grandp.loss']
+  set(tab.prev, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  openxlsx::write.xlsx(tab.prev, file = file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  #
+  # tab.prev <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+  # tab.incid <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+
+  tmp <- rbind(tab.incid, tab.prev)
+  tmp <- as.data.table(tmp)
+  tmp[, id := seq_len(nrow(tmp))]
+  tmp.main <- as.data.table(reshape2::melt(tmp, id = c('loss', 'type', 'id')))
+  tmp.main[, value.main := gsub(' \\(.*', '', value)]
+  tmp.main[, value.ci := gsub('.*\\(', '\\(', value)]
+
+  tmp1 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.main'))
+  tmp2 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.ci'))
+  tmp1[, id := id * 10]
+  tmp2[, id := id * 10 + 1]
+  tmp2[, loss := '']
+  tmp <- rbind(tmp1, tmp2)
+  setkey(tmp, id)
+
+  set(tmp, NULL, 'id', NULL)
+  str(tmp)
+
+  tmp[loss %in% c('cg.loss', 'all'), loss := 'Total']
+  tmp[loss %in% c('orphans'), loss := 'Orphanhood']
+  tmp[loss %in% c('pry.loss'), loss := 'Primary Caregiver Loss']
+  tmp[loss %in% c('secondary.loss'), loss := 'Secondary Caregiver Loss']
+
+  capture.output(print(xtable::xtable(tmp), include.rownames=FALSE), file = file.path(out.dir, paste0('Table1_National_US_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for the Table 1 by all types of cg loss with uncertainty intervals! \n')
+}
+
+generate_table1_pry_cg_types <- function(do.inc.total.raw, do.prev.total.raw, c.pop.all, out.dir, if.rnk)
+{
+  cat('Processing for Table 1 with all types of cg loss...\n')
+  sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
+  unique(do.inc.total.raw$variable)
+
+  tab.incid <- do.inc.total.raw[year %in% sel.yr & variable %in% c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tab.incid[, variable := factor(variable, levels = c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+
+  # add child pop
+  tab.incid <- merge(tab.incid, c.pop.all, by = c('year'), all.x = T)
+  setnames(tab.incid, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tab.incid[, rate := value/pop.c*1e2]
+  tab.incid[, race.eth := 'All']
+  tab.incid <- process_summary_number_rate_change_with_ci_table(tab.incid)
+  # openxlsx::write.xlsx(tab.incid, file = file.path(args$prj.dir, 'results', type.input, 'CI_Table1_National_US_incidence_summary_for_paper.xlsx'),
+  #                      rowNames = F)
+  set(tab.incid, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  # tab.incid <- tab.incid[loss != 'grandp.loss']
+  openxlsx::write.xlsx(tab.incid, file = file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  # prevalence
+  tmp <- do.prev.total.raw[year %in% sel.yr]
+  setnames(tmp, 'loss.type', 'variable')
+  unique(tmp$variable)
+  tmp <- tmp[variable %in% c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tmp[, variable := factor(variable, levels = c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+  tmp[, race.eth := 'All']
+
+  # add child pop
+  tmp <- merge(tmp, c.pop.all,
+               by = c('year'), all.x = T)
+  setnames(tmp, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tmp[, rate := value/pop.c*1e2]
+
+  # by race and ethnicity
+  tab.prev <- process_summary_number_rate_change_with_ci_table(tmp)
+  # tab.prev <- tab.prev[loss != 'grandp.loss']
+  set(tab.prev, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  openxlsx::write.xlsx(tab.prev, file = file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  #
+  # tab.prev <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+  # tab.incid <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+
+  tmp <- rbind(tab.incid, tab.prev)
+  tmp <- as.data.table(tmp)
+  tmp[, id := seq_len(nrow(tmp))]
+  tmp.main <- as.data.table(reshape2::melt(tmp, id = c('loss', 'type', 'id')))
+  tmp.main[, value.main := gsub(' \\(.*', '', value)]
+  tmp.main[, value.ci := gsub('.*\\(', '\\(', value)]
+
+  tmp1 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.main'))
+  tmp2 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.ci'))
+  tmp1[, id := id * 10]
+  tmp2[, id := id * 10 + 1]
+  tmp2[, loss := '']
+  tmp <- rbind(tmp1, tmp2)
+  setkey(tmp, id)
+
+  set(tmp, NULL, 'id', NULL)
+  str(tmp)
+
+  tmp[loss %in% c('cg.loss', 'all'), loss := 'Total']
+  tmp[loss %in% c('orphans'), loss := 'Orphanhood']
+  tmp[loss %in% c('pry.grandp.loss'), loss := 'Primary Grandparent Caregiver Loss']
+  tmp[loss %in% c('secondary.grandp.loss'), loss := 'Secondary Grandparent Caregiver Loss']
+  tmp <- cbind(tmp[, list(loss)], tmp)
+  colnames(tmp)[1] <- 'emp'
+  tmp[emp != 'Total', emp := '']
+  tmp[emp == 'Total', loss := '']
+
+  capture.output(print(xtable::xtable(tmp), include.rownames=FALSE), file = file.path(out.dir, paste0('Table1_National_US_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for the Table 1 by all types of cg loss with uncertainty intervals! \n')
+}
+
+# adj grandp cg loss
+generate_table1_pry_cg_types_adj <- function(do.inc.total.raw, do.prev.total.raw, c.pop.all, out.dir, if.rnk)
+{
+  cat('Processing for Table 1 with all types of cg loss...\n')
+  sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
+  unique(do.inc.total.raw$variable)
+
+  tab.incid <- do.inc.total.raw[year %in% sel.yr & variable %in% c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tab.incid[, variable := factor(variable, levels = c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+
+  # add child pop
+  tab.incid <- merge(tab.incid, c.pop.all, by = c('year'), all.x = T)
+  setnames(tab.incid, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tab.incid[, rate := value/pop.c*1e2]
+  tab.incid[, race.eth := 'All']
+  tab.incid <- process_summary_number_rate_change_with_ci_table(tab.incid)
+  # openxlsx::write.xlsx(tab.incid, file = file.path(args$prj.dir, 'results', type.input, 'CI_Table1_National_US_incidence_summary_for_paper.xlsx'),
+  #                      rowNames = F)
+  set(tab.incid, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  # tab.incid <- tab.incid[loss != 'grandp.loss']
+  openxlsx::write.xlsx(tab.incid, file = file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  # prevalence
+  tmp <- do.prev.total.raw[year %in% sel.yr]
+  setnames(tmp, 'loss.type', 'variable')
+  unique(tmp$variable)
+  tmp <- tmp[variable %in% c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tmp[, variable := factor(variable, levels = c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+  tmp[, race.eth := 'All']
+
+  # add child pop
+  tmp <- merge(tmp, c.pop.all,
+               by = c('year'), all.x = T)
+  setnames(tmp, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tmp[, rate := value/pop.c*1e2]
+
+  # by race and ethnicity
+  tab.prev <- process_summary_number_rate_change_with_ci_table(tmp)
+  # tab.prev <- tab.prev[loss != 'grandp.loss']
+  set(tab.prev, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  openxlsx::write.xlsx(tab.prev, file = file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  #
+  # tab.prev <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+  # tab.incid <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+
+  tmp <- rbind(tab.incid, tab.prev)
+  tmp <- as.data.table(tmp)
+  tmp[, id := seq_len(nrow(tmp))]
+  tmp.main <- as.data.table(reshape2::melt(tmp, id = c('loss', 'type', 'id')))
+  tmp.main[, value.main := gsub(' \\(.*', '', value)]
+  tmp.main[, value.ci := gsub('.*\\(', '\\(', value)]
+
+  tmp1 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.main'))
+  tmp2 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.ci'))
+  tmp1[, id := id * 10]
+  tmp2[, id := id * 10 + 1]
+  tmp2[, loss := '']
+  tmp <- rbind(tmp1, tmp2)
+  setkey(tmp, id)
+
+  set(tmp, NULL, 'id', NULL)
+
+  tmp[loss %in% c('cg.loss', 'all'), loss := 'Total']
+  tmp[loss %in% c('orphans'), loss := 'Orphanhood']
+  tmp[loss %in% c('pry.grandp.loss'), loss := 'Primary Grandparent Caregiver Loss']
+  tmp[loss %in% c('secondary.grandp.loss'), loss := 'Secondary Grandparent Caregiver Loss']
+  tmp <- cbind(tmp[, list(loss)], tmp)
+  colnames(tmp)[1] <- 'emp'
+  tmp[emp != 'Total', emp := '']
+  tmp[emp == 'Total', loss := '']
+
+  capture.output(print(xtable::xtable(tmp), include.rownames=FALSE), file = file.path(out.dir, paste0('Table1_National_US_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for the Table 1 by all types of adj cg loss with uncertainty intervals! \n')
+}
+
+generate_table1_pry_cg_types_adj_paper <- function(do.inc.total.raw, do.prev.total.raw, c.pop.all, out.dir, if.rnk)
+{
+  cat('Processing for Table 1 with all types of cg loss...\n')
+  sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
+  unique(do.inc.total.raw$variable)
+
+  tab.incid <- do.inc.total.raw[year %in% sel.yr & variable %in% c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tab.incid[, variable := factor(variable, levels = c('cg.loss', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+
+  # add child pop
+  tab.incid <- merge(tab.incid, c.pop.all, by = c('year'), all.x = T)
+  setnames(tab.incid, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tab.incid[, rate := value/pop.c*1e2]
+  tab.incid[, race.eth := 'All']
+  tab.incid <- process_summary_number_rate_change_with_ci_table(tab.incid)
+  # openxlsx::write.xlsx(tab.incid, file = file.path(args$prj.dir, 'results', type.input, 'CI_Table1_National_US_incidence_summary_for_paper.xlsx'),
+  #                      rowNames = F)
+  set(tab.incid, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  # tab.incid <- tab.incid[loss != 'grandp.loss']
+  openxlsx::write.xlsx(tab.incid, file = file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  # prevalence
+  tmp <- do.prev.total.raw[year %in% sel.yr]
+  setnames(tmp, 'loss.type', 'variable')
+  unique(tmp$variable)
+  tmp <- tmp[variable %in% c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss')]
+  tmp[, variable := factor(variable, levels = c('all', 'orphans', 'pry.grandp.loss', 'secondary.grandp.loss'))]
+  tmp[, race.eth := 'All']
+
+  # add child pop
+  tmp <- merge(tmp, c.pop.all,
+               by = c('year'), all.x = T)
+  setnames(tmp, 'population', 'pop.c')
+
+  # Note: changed to per 100 children on 1013
+  tmp[, rate := value/pop.c*1e2]
+
+  # by race and ethnicity
+  tab.prev <- process_summary_number_rate_change_with_ci_table(tmp)
+  # tab.prev <- tab.prev[loss != 'grandp.loss']
+  set(tab.prev, NULL, c('2005', '2010', '2015', 'race.eth'), NULL)
+  openxlsx::write.xlsx(tab.prev, file = file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  #
+  # tab.prev <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_prevalence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+  # tab.incid <- (openxlsx::read.xlsx(
+  #   file.path(out.dir, paste0('Table1_National_US_incidence_summary_all_pry_cg_for_paper_rnk', as.integer(if.rnk), '.xlsx')),
+  #   sheet = 1
+  # ))
+
+  tmp <- rbind(tab.incid, tab.prev)
+  tmp <- as.data.table(tmp)
+  tmp[, id := seq_len(nrow(tmp))]
+  tmp.main <- as.data.table(reshape2::melt(tmp, id = c('loss', 'type', 'id')))
+  tmp.main[, value.main := gsub(' \\(.*', '', value)]
+  tmp.main[, value.ci := gsub('.*\\(', '\\(', value)]
+
+  tmp1 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.main'))
+  tmp2 <- as.data.table(reshape2::dcast(tmp.main, loss+id~variable, value.var = 'value.ci'))
+  tmp1[, id := id * 10]
+  tmp2[, id := id * 10 + 1]
+  tmp2[, loss := '']
+  tmp <- rbind(tmp1, tmp2)
+  setkey(tmp, id)
+
+  set(tmp, NULL, 'id', NULL)
+
+  tmp[loss %in% c('cg.loss', 'all'), loss := 'Total']
+  tmp[loss %in% c('orphans'), loss := 'Orphanhood']
+  tmp[loss %in% c('pry.grandp.loss'), loss := 'Primary Grandparent Caregiver Loss']
+  tmp[loss %in% c('secondary.grandp.loss'), loss := 'Secondary Grandparent Caregiver Loss']
+  tmp <- cbind(tmp[, list(loss)], tmp)
+  colnames(tmp)[1] <- 'emp'
+  tmp[emp != 'Total', emp := '']
+  tmp[emp == 'Total', loss := '']
+
+  capture.output(print(xtable::xtable(tmp), include.rownames=FALSE), file = file.path(out.dir, paste0('Table1_National_US_summary_all_adj_pry_cg_for_paper_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for the Table 1 by all types of adj cg loss with uncertainty intervals! \n')
+
+  return(tmp)
+}
 generate_tableS3 <- function(do.inc.total, deaths.total, out.dir, if.rnk)
 {
     cat('Processing for Supp Table 3 ...\n')
@@ -660,6 +1011,7 @@ generate_table_for_fig1_1e5_children <- function(tmp, tmp2, out.dir, if.rnk)
 
   tab[!(grepl('rate', variable)), value_m:= gsub(' ', '', format(round(output), big.mark = ","))]
   tab[grepl('rate', variable), value_m := gsub(' ', '', format(round(output, 2), digits = 2, nsmall = 2))]
+  setnames(tab, 'state', 'stat')
   pd <- dcast.data.table(tab, year+cause.name+variable~stat, value.var = 'value_m')
 
   # rank for the cause
@@ -723,6 +1075,99 @@ generate_table_for_fig1_1e5_children <- function(tmp, tmp2, out.dir, if.rnk)
 
   capture.output(print(xtable::xtable(pds), include.rownames=FALSE), file = file.path(out.dir, paste0('STab_for_Fig1_National_US_summary_rnk', as.integer(if.rnk), '.txt')))
   cat('Done for supp tab for Fig1 ...\n')
+
+}
+generate_table_for_fig5_children <- function(tmp, out.dir, if.rnk)
+{
+  sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
+
+  tab.a <- tmp$tab.a[year %in% sel.yr]
+  tab.b <- tmp$tab.b[year %in% sel.yr]
+  tab.c <- tmp$tab.c[year %in% sel.yr]
+  tab.d <- tmp$tab.d[year %in% sel.yr]
+  # tab.e <- tmp2
+
+  # combe the data from the figures to table
+  # select
+  tab <- rbind(tab.a[, variable := 'incid-number'],
+               tab.c[, variable := 'incid-rate'],
+               tab.b[, variable := 'preval-number'],
+               tab.d[, variable := 'preval-rate'], use.names = T, fill = T)
+
+  # tab[grepl('rate', variable), value := value * 1e3]
+
+  # agg others
+  tab <- tab[, list(output = sum(value, na.rm =T)), by = c('cause.name', 'year', 'state', 'race.eth', 'variable')]
+
+
+  # unique(tab.a$cause.name)
+
+  tab[!(grepl('rate', variable)), value_m:= gsub(' ', '', format(round(output), big.mark = ","))]
+  tab[grepl('rate', variable), value_m := gsub(' ', '', format(round(output, 2), digits = 2, nsmall = 2))]
+  setnames(tab, 'state', 'stat')
+  pd <- as.data.table(reshape2::dcast(tab[,list(cause.name,year,stat,variable,value_m)], year+cause.name+variable~stat, value.var = 'value_m'))
+
+  # rank for the cause
+  pd.cn <- unique(pd$cause.name)
+  cn <- c( pd.cn[grepl('COVID', pd.cn)],  pd.cn[grepl('Drug', pd.cn)], pd.cn[grepl('Accidents', pd.cn)], pd.cn[grepl('self-harm', pd.cn)], pd.cn[grepl('Assault', pd.cn)], pd.cn[grepl('Malignant neoplasms', pd.cn)], pd.cn[grepl('Human immunodeficiency', pd.cn)],
+           pd.cn[!(grepl('COVID', pd.cn) | grepl('Drug', pd.cn) | grepl('Accidents', pd.cn) | grepl('self-harm', pd.cn) | grepl('Other', pd.cn) | grepl('Assault', pd.cn) | grepl('Malignant neoplasms', pd.cn) | grepl('Human immunodeficiency', pd.cn))], pd.cn[grepl('Other', pd.cn)])
+  cn <- as.character(cn)
+  change.tmp <- update_single_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_homicide_accident_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  change.tmp <- update_mental_cause_name(pd, cn)
+  pd <- change.tmp$pd
+  cn <- change.tmp$cn
+
+  pd[, cause.name := factor(cause.name, levels = cn)]
+  # str(pd)
+
+  pd[, variable := factor(variable, levels = unique(tab$variable))]
+
+  setkey(pd, year, variable, cause.name)
+
+  # put the UIs in the next line
+  # pd[, id := 10*seq_len(nrow(pd))]
+  pd[, value := paste0('(', CL, ', ', CU, ')')]
+
+  pds <- pd[, list(year,cause.name,variable,M)]
+  setnames(pds, 'M', 'value')
+  tp <- as.data.table(reshape2::dcast(pds, variable+cause.name~year, value.var = 'value'))
+
+  tmp <- pd[, list(year,cause.name,variable,value)]
+  tp2 <- as.data.table(reshape2::dcast(tmp, variable+cause.name~year, value.var = 'value'))
+
+  tp[, id := 10*seq_len(nrow(tp))]
+  tp2[, id := 10*seq_len(nrow(tp2)) + 1]
+  tp2[, cause.name := '']
+  pds <- rbind(tp, tp2)
+  setkey(pds, id)
+
+  openxlsx::write.xlsx(pds[, -'id'], file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_rnk', as.integer(if.rnk), '.xlsx')),
+                       rowNames = F)
+
+  # separate the long cause names
+  sel.id <- pds[grepl('excluding', cause.name)]$id
+  pds[grepl('excluding', cause.name), cause.name := gsub('\n', '-', cause.name)]
+  pds$cause.name <- as.character(pds$cause.name)
+  pds[id %in% sel.id, cause.name := unlist(lapply(strsplit(cause.name, "-"),'[' ,1))]
+  pds[id %in% (sel.id+1), cause.name := 'excluding drug overdose']
+
+  sel.id <- pds[grepl('and', cause.name)]$id
+  pds[id %in% sel.id, cause.name := unlist(lapply(strsplit(cause.name, " and"),'[' ,1))]
+  pds[id %in% (sel.id+1), cause.name := 'and cirrhosis']
+
+
+  setkey(pds, id)
+  set(pds, NULL, c('variable', 'id'), NULL)
+
+  capture.output(print(xtable::xtable(pds), include.rownames=FALSE), file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for supp tab for EDF5 ...\n')
 
 }
 
@@ -820,7 +1265,7 @@ generate_table_for_fig5_1e5_children <- function(tmp, out.dir, if.rnk)
 
 }
 
-generate_table_for_fig5_children <- function(tmp, out.dir, if.rnk)
+generate_table_for_fig5_1e5_children_sep <- function(tmp, out.dir, if.rnk, type.grandp)
 {
   sel.yr <- c(2000, 2005, 2010, 2015, 2019, 2020, 2021)
 
@@ -837,7 +1282,7 @@ generate_table_for_fig5_children <- function(tmp, out.dir, if.rnk)
                tab.b[, variable := 'preval-number'],
                tab.d[, variable := 'preval-rate'], use.names = T, fill = T)
 
-  # tab[grepl('rate', variable), value := value * 1e3]
+  tab[grepl('rate', variable), value := value * 1e3]
 
   # agg others
   tab <- tab[, list(output = sum(value, na.rm =T)), by = c('cause.name', 'year', 'state', 'race.eth', 'variable')]
@@ -891,7 +1336,7 @@ generate_table_for_fig5_children <- function(tmp, out.dir, if.rnk)
   pds <- rbind(tp, tp2)
   setkey(pds, id)
 
-  openxlsx::write.xlsx(pds[, -'id'], file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_rnk', as.integer(if.rnk), '.xlsx')),
+  openxlsx::write.xlsx(pds[, -'id'], file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_', type.grandp,'_rnk', as.integer(if.rnk), '.xlsx')),
                        rowNames = F)
 
   # separate the long cause names
@@ -909,8 +1354,8 @@ generate_table_for_fig5_children <- function(tmp, out.dir, if.rnk)
   setkey(pds, id)
   set(pds, NULL, c('variable', 'id'), NULL)
 
-  capture.output(print(xtable::xtable(pds), include.rownames=FALSE), file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_rnk', as.integer(if.rnk), '.txt')))
-  cat('Done for supp tab for EDF5 ...\n')
+  capture.output(print(xtable::xtable(pds), include.rownames=FALSE), file = file.path(out.dir, paste0('STab_for_EDF5_National_US_summary_', type.grandp,'_rnk', as.integer(if.rnk), '.txt')))
+  cat(paste0('Done for supp tab for EDF5 for type', type.grandp , '...\n'))
 
 }
 
@@ -1134,4 +1579,116 @@ generate_tableS12_1e5_children <- function(do.inc.total.raw, out.dir, if.rnk)
   set(tmp2, NULL, 'id', NULL)
   capture.output(print(xtable::xtable(tmp2), include.rownames=FALSE), file = file.path(out.dir, paste0('STab12_for_fig3_1e5_children_rnk', as.integer(if.rnk), '.txt')))
   cat('Done for supp table S12 for 1e5 children ...\n')
+}
+
+generate_tableS12_extra_1e5_children <- function(do.inc.total.raw, out.dir, if.rnk)
+{
+  cat('Processing for Supp Table 12 incidence  ...\n')
+
+  # for the incidence table
+  do.inc.cause <- do.inc.total.raw[race.eth != 'Others' & year >= 2000]
+  do.inc.cause[, state := 'All']
+  setnames(do.inc.cause, 'variable', 'loss.type')
+  unique(do.inc.cause$loss.type)
+  do.inc.cause$loss.type <- as.character(do.inc.cause$loss.type)
+  do.inc.cause[loss.type == 'orphans', loss.type := 'parents']
+
+  # select 10 causes
+  # Top ten cause in Figure 1 + one more cause at the state level
+  tmp.cause <- c(get_leading_cause_national()$raw,
+                 get_leading_cause_state()$raw, 'Cerebrovascular diseases', 'Chronic lower respiratory diseases')
+  tmp.cause <- unique(tmp.cause[tmp.cause!='Others'])
+  # print(tmp.cause)
+
+  dt.cum.all.age.incid <- do.inc.cause[cause.name %in% tmp.cause]
+
+  # compute for the rate
+  c.pop.race.t <- c.pop.race[race.eth != 'Others', list(population = sum(population, na.rm = T)),
+                             by = c('year', 'race.eth')]
+  tmp <- merge(dt.cum.all.age.incid, c.pop.race.t, by = c('race.eth', 'year'), all.x = T)
+  tmp <- tmp[year %in% c(2000,2019)]
+  tab.incid <- tmp[, list(year,race.eth,value,cause.name,loss.type,population,rep.nb)]
+  tab.incid[, variable := paste0(race.eth, '_',cause.name, '_', loss.type)]
+  tab.incid[, rate := (value/population*1e5)]
+  # tab.incid[, rate := rate/10/100]
+  unique(tab.incid$loss.type)
+
+  tmp <- as.data.table(expand.grid(
+    year = unique(tab.incid$year),
+    variable = unique(tab.incid$variable),
+    rep.nb = unique(tab.incid$rep.nb)))
+
+  tab.incid <- merge(tab.incid, tmp, by = c('year', 'variable', 'rep.nb'), all = T)
+  tab.incid[is.na(value), rate := 0]
+  tab.incid[is.na(value), value := 0]
+  tab.incid[value == 0, rate := 0]
+  tab.incid[, race.eth := factor(race.eth,
+                                 levels = c("Total",
+                                            "Non-Hispanic American Indian or Alaska Native",
+                                            "Non-Hispanic Asian",
+                                            "Non-Hispanic Black",
+                                            "Hispanic",
+                                            "Non-Hispanic White"))]
+
+  setkey(tab.incid, year,variable,race.eth, rep.nb)
+  tab.incid[, state := 'National']
+  tab.incid[, race.eth := 'x']
+  unique(tab.incid$variable)
+
+  #
+  tab.incid.prev <- process_summary_number_rate_cause_race_change_with_ci_table_2019(tab.incid)
+  tmp <- copy(tab.incid.prev)
+  tmp[cause.name != 'Drug overdose', race.eth := NA]
+
+  tmp[, id := seq_len(nrow(tmp))]
+  tmp[, id := id * 10]
+
+  # reformat: put the UI in the next line
+  tmp2 <- tmp[, 3:ncol(tmp)]
+  tmp2[, id := id + 1]
+
+  tmp <- as.data.table(reshape2::melt(tmp, id = c('race.eth', 'cause.name', 'id')))
+  tmp[, value := unlist(lapply(strsplit(value, " \\("),'[' ,1))]
+
+  tmp2 <- as.data.table(reshape2::melt(tmp2, id = c( 'id')))
+  tmp2[, value := unlist(lapply(strsplit(value, " \\("),'[' ,2))]
+  tmp2[grepl('\\)', value), value := paste0('(', value)]
+
+  tmp <- as.data.table(reshape2::dcast(tmp, id+race.eth+cause.name~variable, value.var = 'value'))
+  tmp2 <- as.data.table(reshape2::dcast(tmp2, id~variable, value.var = 'value'))
+
+  tmp2 <- rbind(tmp, tmp2, use.names = T, fill = T)
+  setkey(tmp2, id)
+
+  # add midrule to sep race.eth
+  tmp <- tmp[!is.na(race.eth), list(race.eth,id)]
+  tmp[, id := id - 1]
+  tmp[, race.eth := '\\midrule']
+  tmp2 <- rbind(tmp, tmp2, use.names = T, fill = T)
+  setkey(tmp2, id)
+
+  #
+  # save ids for long cause names
+  sel.id <- tmp2[grepl('excluding', cause.name)]$id
+  tmp2[grepl('excluding', cause.name), cause.name := gsub('\n', '-', cause.name)]
+  tmp2$cause.name <- as.character(tmp2$cause.name)
+  tmp2[id %in% sel.id, cause.name := unlist(lapply(strsplit(cause.name, "-"),'[' ,1))]
+  tmp2[id %in% (sel.id+1), cause.name := 'excluding drug overdose']
+
+  sel.id <- tmp2[grepl('and', cause.name)]$id
+  tmp2[id %in% sel.id, cause.name := unlist(lapply(strsplit(cause.name, " and"),'[' ,1))]
+  tmp2[id %in% (sel.id+1), cause.name := 'and cirrhosis']
+
+  # for AIAN
+  sel.id <- tmp2[grepl('or Alaska Native', race.eth)]$id
+  tmp2$race.eth <- as.character(tmp2$race.eth)
+  tmp2[id %in% sel.id, race.eth := unlist(lapply(strsplit(race.eth, " or"),'[' ,1))]
+  tmp2[id %in% (sel.id+1), race.eth := 'or Alaska Native']
+
+  tmp2 <- rbind(tmp2, tmp, use.names = T, fill = T)
+  setkey(tmp2, id)
+
+  set(tmp2, NULL, 'id', NULL)
+  capture.output(print(xtable::xtable(tmp2), include.rownames=FALSE), file = file.path(out.dir, paste0('STab12_for_fig3_2019_1e5_children_rnk', as.integer(if.rnk), '.txt')))
+  cat('Done for supp table S12 2019 for 1e5 children ...\n')
 }

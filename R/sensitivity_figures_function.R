@@ -96,6 +96,32 @@ age_prevl_f2b <- function(dt.wo.cause)
   return(dt.cum.all.age.pre.rate)
 }
 
+race_prevl_plot <- function(do.national.disagg, sur.rate)
+{
+  # do.main
+  do.age.children.par.grand.all.race <- do.national.disagg[year != 2022]
+  do.age.children.par.grand.all.race[, cause.name := gsub('\\\n.*', '', cause.name)]
+  do.age.children.par.grand.all.race[, cause.name := gsub('#', '', cause.name)]
+
+  set(do.age.children.par.grand.all.race,NULL,'deaths', NULL)
+  do.age.children.par.grand.all.race <- do.age.children.par.grand.all.race[, year := as.integer(year)]
+  dt.cum.all.cause.race <- get_preval_all_cg_loss_types_age_children_child_mort_incul_all_yr(sur.rate, do.age.children.par.grand.all.race)
+  dt.cum.all.age <- dt.cum.all.cause.race[year != 2022 & year >= 2000 & race.eth != 'Others', list(value = sum(value, na.rm = T)),
+                                          by = c('state', 'variable', 'race.eth', 'year')]
+
+  # sum(dt.cum.all.age$value)
+  unique(dt.cum.all.age$variable)
+
+  dt.cum.all.age.pre <- dt.cum.all.age[ year >= 2000 & variable == 'orphans']
+  c.pop <- as.data.table( read.csv(file.path(args$in.dir, 'data', 'pop', paste0('national_race', '_usa_children_population_age.csv'))))
+  c.pop <- c.pop[, list(pop = sum(population, na.rm = T)),
+                 by = c('state', 'year', 'race.eth')]
+  dt.cum.all.age.pre.rate <- merge(dt.cum.all.age.pre, c.pop, by = c('state', 'race.eth', 'year'), all.x = T)
+  dt.cum.all.age.pre.rate[, value := value/pop*1e5]
+  dt.cum.all.age.pre.rate[, value := value/10/100]
+  return(dt.cum.all.age.pre.rate)
+}
+
 disagg_grand_loss_age_child <- function(prj.dir, dist.age, dt.grand, dt.all, type.input, race.type)
 {
 
@@ -105,13 +131,15 @@ disagg_grand_loss_age_child <- function(prj.dir, dist.age, dt.grand, dt.all, typ
   dt.grand[, grandp.loss := round(prop * grandp.loss)]
 
   set(dt.grand, NULL, 'prop', NULL)
-  # TODO why female == men?
-  # dt.grand <- as.data.table(reshape2::dcast(dt.grand,cause.name+state+race.eth+child.age+year~sex))
+  tmp <- as.data.table(reshape2::dcast(dt.grand,cause.name+state+race.eth+child.age+year~sex, value.var = 'grandp.loss'))
+  tmp
+
   tmp <- dt.grand[sex == 'Female']
   setnames(tmp, 'grandp.loss', 'grandmother')
   dt.grand <- dt.grand[sex != 'Female']
   setnames(dt.grand, 'grandp.loss', 'grandfather')
-  dt.grand <- merge(dt.grand, tmp, by = c('cause.name', 'state', 'race.eth', 'year', 'child.age', 'variable'), all = T)
+
+  dt.grand <- merge(dt.grand, tmp, by = c('cause.name', 'state', 'race.eth', 'year', 'child.age'), all = T)
   setkey(dt.grand, year)
   set(dt.grand, NULL, c('sex.x', 'sex.y'), NULL)
   dt.grand[, cause.name := as.character(cause.name)]
@@ -549,7 +577,8 @@ generate_edf10b <- function(tmp2)
     theme_bw() +
     xlab('Year') +
     ylab(paste0(row.title)) +
-    labs(col = '', linetype = '') +
+    labs(col = 'Sensitivity analysis on age composition of grandchildren',
+         linetype = 'Sensitivity analysis on age composition of grandchildren') +
     ggrepel::geom_text_repel(
       aes(label = age.group.id,
           size = 5,
@@ -558,8 +587,8 @@ generate_edf10b <- function(tmp2)
       # col = 'black',
       show.legend = FALSE
     ) +
-    guides(colour = 'none',
-           linetype = guide_legend(nrow = 1, linewidth = .3)) +
+    guides(linetype = guide_legend(title.position="top", title.hjust = 0.5, nrow = 1),
+           col = 'none') +
     theme(legend.position = "bottom",
           legend.key.width = unit(1,"cm"),
           axis.title = element_text(size = 16),
@@ -619,7 +648,8 @@ generate_edf10c <- function(tmp2)
     theme_bw() +
     xlab('Year') +
     ylab(paste0(row.title)) +
-    labs(col = '', linetype = '') +
+    labs(col = 'Sensitivity analysis on age composition of grandchildren',
+         linetype = 'Sensitivity analysis on age composition of grandchildren') +
     ggrepel::geom_text_repel(
       aes(label = age.group.id,
           size = 5,
@@ -628,9 +658,9 @@ generate_edf10c <- function(tmp2)
       # col = 'black',
       show.legend = FALSE
     ) +
-    guides(colour = 'none',
-           linetype = guide_legend(nrow = 1, linewidth = .3)) +
-    theme(legend.position = "bottom",
+    guides(linetype = guide_legend(title.position="top", title.hjust = 0.5, nrow = 1),
+           col = 'none') +
+     theme(legend.position = "bottom",
           legend.key.width = unit(1,"cm"),
           axis.title = element_text(size = 16),
           axis.text = element_text(size=13, family='sans'),

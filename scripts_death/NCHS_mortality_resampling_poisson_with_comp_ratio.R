@@ -30,7 +30,7 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
   args$prj.dir <- here::here()
   args$rep.nb <- 1
   rep.nb <- args$rep.nb
-  args$out.dir <- file.path(args$prj.dir, 'data', 'NCHS', 'rep_mortality_poisson_with_comp_ratio', paste0('rep_id-', rep.nb))
+  args$out.dir <- file.path(args$prj.dir, 'data', 'NCHS', 'rep_mortality_poisson_with_comp_ratio_0521', paste0('rep_id-', rep.nb))
 }
 rep.nb <- args$rep.nb
 if.plt <- F
@@ -38,11 +38,10 @@ args$data.dir <- file.path(args$prj.dir, 'data', 'NCHS', 'death')
 str(args)
 
 # source functions to adjust and resample mortality data based on flownetwork ideas
-# source(file.path(args$prj.dir, 'scripts_death', 'NCHS_death_processing_sampling_function.R'))
-# 0214 version
-# source(file.path(args$prj.dir, 'scripts_death', 'debug_NCHS_death_processing_sampling_function.R'))
-source(file.path(args$prj.dir, 'scripts_death', 'single_icd_NCHS_death_processing_sampling_function.R'))
+# using the 282 or 72 recode...
 
+# 0214 version
+source(file.path(args$prj.dir, 'scripts_death', 'debug_NCHS_death_processing_sampling_function.R'))
 # Check if we have the raw data preprocessed by ICD-9 and ICD-10
 {
   # Process line-list data table ----
@@ -121,26 +120,9 @@ cat('\nResampling the mortality data based on poisson distribution ...\n')
 tmp <- readRDS(file.path(args$out.dir, 'rankable_cause_deaths_1983-2021_raw_state_raceth.RDS'))
 resampling_poisson_dist(args$out.dir, tmp, rep.nb)
 
-# tmp <- readRDS(file.path(args$out.dir, 'rankable_cause_deaths_1983-2021.RDS'))
-# tmp1 <- readRDS(file.path("/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/Github/US_all_causes_deaths/data/NCHS/rep_mortality_poisson_with_comp_ratio/rep_id-1", 'rankable_cause_deaths_1983-2021.RDS'))
-#
-# #
-# setnames(tmp, 'deaths', 'deaths.icd9')
-# setnames(tmp1, 'deaths', 'deaths.comb')
-# tmp.comp <- merge(tmp, tmp1, by = c('age', 'sex', 'year', 'state', 'cause.name', 'race.eth'), all = T)
-# tmp.comp[is.na(deaths.icd9)]
-#
-# tmp.comp <- tmp.comp[, list(deaths.icd9 = sum(deaths.icd9, na.rm = T), deaths.comb = sum(deaths.comb, na.rm  = T)), by = c('sex', 'year', 'cause.name')]
-# # compare the leading causes-of-death
-# tmp1 <- get_leading_cause_national()
-# tmp.comp[cause.name %in% c(tmp1$raw)]
-#
-#
-# tmp.comp[, list(deaths.icd9 = sum(deaths.icd9), deaths.comb = sum(deaths.comb)), by = c('year')]
-#
-
-#
 cat('Done for NCHS death data...\n')
 unlink(file.path(args$out.dir, '*.csv'))
 unlink(file.path(args$out.dir, '*.png'))
+unlink(file.path(args$out.dir, 'rankable_cause_deaths_1983-2021_raw_state_raceth.RDS'))
+
 gc()

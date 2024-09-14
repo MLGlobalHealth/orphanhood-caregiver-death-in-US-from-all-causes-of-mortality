@@ -3,16 +3,17 @@ Using the BeautifulSoup to extract the data table embedded in the pdf
 The mortality data prior 1999, by 5-year age groups, sex, 
 causes of deaths (with cause name and code in 113 code list)
 
-Date: 2023.06.21
-Yu Chen
+Confidential data -- not save
+
 """
+
 
 import os
 from os import path
 import time
 import json
 import fitz
-import xlrd
+# import xlrd
 import shutil
 import requests
 
@@ -35,16 +36,8 @@ class DeathExtractor:
     def __init__(self):
         self.today = date.today().strftime("%Y-%m-%d")
 
-    def get_data_upto44(self):
-        url = 'https://www.cdc.gov/nchs/data/statab/hist002_1.pdf'
-        ## updated daily
-
-            r = requests.get(url)
-            r.raise_for_status()
-
-            with open("data/NCHS/death/death_0-44.pdf", "wb") as f:
-                f.write(r.content)
-            doc = fitz.Document(path.join(os.getcwd(), data_path, 'NCHS', 'death',"death_0-44.pdf"))
+    def get_mapping_table(self):
+            doc = fitz.Document(path.join(os.getcwd(), data_path, 'NCHS', 'death', 'confidential', 'WHO_ICD9_10_translator', '9TO10.PDF'))
             # find the page
             # from page 2 will extract for each table and then filter what we want
             finalLines = doc.get_page_text(-1).splitlines()

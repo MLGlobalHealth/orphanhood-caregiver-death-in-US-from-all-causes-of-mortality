@@ -53,7 +53,7 @@ generate_table_S13 <- function(do.inc.total, do.prev.total, out.dir)
   tmp.cu <- process_pry_contrib_orphans_state_table(do.inc.total[stat == 'CU'], do.prev.total[stat == 'CU'])
 
   #
-  tmp[, value.t := round(value.t)]
+  # tmp[, value.t := round(value.t)]
   #
   setnames(tmp, c('value.t', 'rate.t'), c('loss.M', 'rate.M'))
   setnames(tmp.cl, c('value.t', 'rate.t'), c('loss.CL', 'rate.CL'))

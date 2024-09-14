@@ -3178,7 +3178,7 @@ get_iter_estimates_historical_mortality_state <- function(prj.dir, raw.type, adj
   infiles.par <-  unlist(infile.par)
 
   # grandp without age of children
-  infile.grand <- list.files(file.path(prj.dir, 'results', paste0(raw.type, adj.v.name)), pattern = paste0('grandparents_deaths_loss.*'), full.names = TRUE, recursive=F)
+  infile.grand <- list.files(file.path(prj.dir, 'results', paste0(raw.type, adj.v.name)), pattern = paste0('grandparents.*'), full.names = TRUE, recursive=F)
   infiles.grand <-  unlist(infile.grand)
 
   do <- list()
@@ -3193,7 +3193,7 @@ get_iter_estimates_historical_mortality_state <- function(prj.dir, raw.type, adj
   }
   do.par <- list()
   do.grand <- list()
-    for (i in seq_len(length(infiles.par)))
+  for (i in seq_len(length(infiles.par)))
   {
     # parents
     infile.par <- infiles.par[i]
@@ -3211,8 +3211,7 @@ get_iter_estimates_historical_mortality_state <- function(prj.dir, raw.type, adj
     do.grand[[i]][, cause.name := gsub(' \\(', '\n(', cause.name)]
     do.grand[[i]][, year := as.integer(yr)]
   }
-
-    type.input <- file.path(type.input, 'initial_result')
+  type.input <- file.path(type.input, 'initial_result')
 
   do.national.disagg <- data.table::rbindlist( do, use.names = T, fill = T )
   write.csv(do.national.disagg, file.path(prj.dir, 'results', type.input, paste0(rep.nb, '-hist_', raw.type, 'summary_cg_loss_age.csv')), row.names = F)
@@ -4264,4 +4263,68 @@ load_format_incid_preval <- function(prj.dir, summary.type.input, state.type, ra
 
   return(list(dt.inc = dt.inc.no.parent, dt.prev = dt.prev.m.no.parent,
               dt.inc.parent = dt.inc, dt.prev.parent = dt.prev.m))
+}
+
+# considering the child mortality rates ----
+get_cum_survival_rate <- function(deaths)
+{
+  # need to compute the live orphans in each year
+  # survival rates need to be multiplied in the past years
+  deaths[, rate := 1- mort.rate.child]
+  sur.rate.raw <- deaths[, list(age,year,race.eth,rate)]
+
+  sur.rate <- list()
+  # year gap is 0, sur.rate is raw itself
+  for (yr.gap in 1:17)
+  {
+    # more than one year gaps, need to increase the age and year by 1 to match the current survival number
+    # age and year are current infor
+    sur.rate[[yr.gap]] <- copy(sur.rate.raw)
+    sur.rate[[yr.gap]][, year.gap := yr.gap]
+    sur.rate[[yr.gap]][, age := age + year.gap]
+    sur.rate[[yr.gap]][, year := year + year.gap]
+  }
+  sur.rate.all <- data.table::rbindlist( sur.rate, use.names = T, fill = T )
+  sur.rate.all <- rbind(sur.rate.raw[, year.gap := 0], sur.rate.all)
+  sur.rate.all <- sur.rate.all[age %in% 0:17]
+  summary(sur.rate.all$year)
+
+  sur.rate.all <- as.data.table(reshape2::dcast(sur.rate.all, age+year+race.eth~year.gap, value.var = 'rate'))
+  sur.rate.all <- sur.rate.all[,lapply(.SD,function(x){ifelse(is.na(x),1,x)})]
+  # wont consider the adj in current year
+  sur.rate.all[, multi.sur.rate := `1`*`2`*`3`*`4`*`5`*`6`*`7`*`8`*`9`*`10`*`11`*`12`*`13`*`14`*`15`*`16`*`17`]
+
+  # back to the normal format
+  sur.rate.all <- sur.rate.all[, list(age,year,race.eth,multi.sur.rate)]
+
+  return( sur.rate.all )
+
+}
+
+process_child_survival_rate <- function(prj.dir)
+{
+  # get the deaths of children
+
+  deaths <- readRDS(file.path(prj.dir, 'data/NCHS/death_child', 'output', paste0('NCHS_deaths_children_1983-2021.RDS')))
+  deaths <- deaths[, list(deaths = sum(deaths, na.rm = T)),
+                   by = c('age', 'year', 'race.eth')]
+
+  # get the population
+  cat('Process the population sizes of children...\n')
+  {
+    extract_single_age_child_pop_state_national(file.path(prj.dir, 'data'), 'national_adjust')
+  }
+  c.pop.race <- as.data.table( read.csv(file.path(prj.dir, 'data', 'data', 'pop', paste0('national_adjust', '_usa_single_age_children_population_all.csv'))))
+
+  deaths <- merge(deaths, c.pop.race, by = c("age", 'year', 'race.eth'), all.x = T)
+
+  # # death counts of 'Others' race.eth
+  # deaths[race.eth == 'Others', sum(deaths), by = 'year']
+  # deaths[, sum(deaths), by = 'year']
+  # 4% in 2020, 2021, ..., 0.06% in 2019...
+  deaths <- deaths[race.eth != 'Others']
+  deaths[, mort.rate.child := deaths/population]
+
+  sur.rate <- get_cum_survival_rate(deaths)
+  return(sur.rate)
 }

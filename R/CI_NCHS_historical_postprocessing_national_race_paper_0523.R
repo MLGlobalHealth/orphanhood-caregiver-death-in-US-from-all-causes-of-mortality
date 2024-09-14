@@ -70,6 +70,7 @@ source(file.path(args$prj.dir,"R","figures_paper.R"))
 pl.tab <- readRDS(file.path(args$prj.dir, 'data', 'color_setting.RDS'))
 
 # prevalence function
+# considering the child mortality rates
 get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all, show.nb)
 {
   # prevalence
@@ -80,12 +81,33 @@ get_preval_cg_loss_age_children_all_yr <- function(do.age.children.par.grand.all
   data <- data[, list(cause.name,state,child.age,race.eth,year,mother,father,orphans,grandp.loss,all)]
   data <- as.data.table(reshape2::melt(data, id = c('cause.name', 'child.age','state','race.eth','year')))
 
+  deaths <- readRDS(file.path(prj.dir, 'data/NCHS/death_child', 'output', paste0('NCHS_deaths_children_1983-2021.RDS')))
+  deaths <- deaths[, list(deaths = sum(deaths, na.rm = T)),
+                   by = c('age', 'year', 'race.eth')]
+
+  # get the population for child survival rates computation
+  cat('Process the population sizes of children...\n')
+  {
+    extract_single_age_child_pop_state_national(file.path(prj.dir, 'data'), 'national_adjust')
+  }
+  c.pop.race <- as.data.table( read.csv(file.path(prj.dir, 'data', 'data', 'pop', paste0('national_adjust', '_usa_single_age_children_population_all.csv'))))
+
+  deaths <- merge(deaths, c.pop.race, by = c("age", 'year', 'race.eth'), all.x = T)
+  deaths <- deaths[race.eth != 'Others']
+  deaths[, mort.rate.child := deaths/population]
+
+  sur.rate <- get_cum_survival_rate(deaths)
+
+  #
   dt.cum <- list()
   for (yr in unique(data$year))
   {
     tmp <- data[year <= yr]
     tmp <- tmp[, cur.child.age := yr - year + child.age]
-    tmp <- tmp[, list(value = sum(value, na.rm = T)),
+
+    tmp <- merge(tmp, sur.rate[year == yr],
+                 by.x = c('cur.child.age', 'race.eth'), by.y = c('age', 'race.eth'), all.x = T)
+    tmp <- tmp[, list(value = as.numeric(sum(value * multi.sur.rate, na.rm = T))),
                by = c('cause.name','state','race.eth','variable','cur.child.age','variable')]
     tmp[, cur.yr := yr]
     dt.cum[[yr]] <- tmp
@@ -710,6 +732,11 @@ if (1)
   generate_tableS12_1e5_children(do.inc.total.raw, args$out.dir, if.rnk)
   cat('Saving data for TableS12 to file ...\n')
   save(do.inc.total.raw, file = file.path(args$out.dir, paste0('data_tableS12.RData')))
+
+
+  # 240712 for 2019
+  # load(file = file.path(args$out.dir, paste0('data_tableS12.RData')))
+  generate_tableS12_extra_1e5_children(do.inc.total.raw, args$out.dir, if.rnk)
 
   cat('Done for the national by race/eth analysis ...\n')
 }

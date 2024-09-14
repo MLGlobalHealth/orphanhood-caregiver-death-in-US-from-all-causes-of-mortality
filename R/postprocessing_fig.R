@@ -8031,10 +8031,6 @@ incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi <- function
     scale_size_continuous(range = c(2, 8),
                           breaks = c(0, 0.5, 1, 2, 3, 8, 12, 16),
                           labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "16%")) +
-
-    # scale_size_continuous(range = c(1, 9),
-    #                       breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
-    #                       labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
     facet_wrap(factor(race.eth, levels = (race.cat))~.,
                # scales = 'free_x',
                ncol = 3, nrow = 2
@@ -8076,7 +8072,7 @@ incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi <- function
 
   p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
     geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
-    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    geom_point(aes(col = id.lab), shape = 16, alpha = .7, fill = 'white') +
     scale_colour_manual(values = c(col.in)) +
     # to have the same x-axis ticks as those on the y-axis
     # scale_y_continuous(limits =
@@ -8093,10 +8089,6 @@ incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi <- function
     scale_size_continuous(range = c(2, 8),
                           breaks = c(0, 0.5, 1, 2, 3, 8, 12, 16),
                           labels = c("0%", "0.5%", "1%", "2%", "3%", "8%", "12%", "16%")) +
-
-    # scale_size_continuous(range = c(1, 9),
-    #                       breaks = c(0, 1, 2, 4, 8, 12, 18, 26, 36),
-    #                       labels = c("0%", "1%", "2%", "4%", "8%", "12%", "18%", "26%", "36%")) +
     facet_wrap(factor(race.eth, levels = (race.cat))~.,
                # scales = 'free_x',
                ncol = 3, nrow = 2
@@ -8287,7 +8279,7 @@ incidence_rate_change_rate_bubble_part_race_children_by_cause_y_posi_2019 <- fun
 
   p.m <- ggplot(pd[sex == 'Mother'], aes(y = `2021`, x = change.rate, size = contrib, label = id)) +
     geom_vline(xintercept = 0, colour="grey70", lwd = .8, linetype = 'dashed') +
-    geom_point(aes(col = id.lab), shape = 17, alpha = .7, fill = 'white') +
+    geom_point(aes(col = id.lab), shape = 16, alpha = .7, fill = 'white') +
     scale_colour_manual(values = c(col.in)) +
     scale_y_continuous(
       limits = c(0, 0.072),

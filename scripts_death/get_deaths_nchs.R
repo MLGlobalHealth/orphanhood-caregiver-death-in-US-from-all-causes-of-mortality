@@ -1,5 +1,8 @@
 # This script aims for data scraping.
-# download the files based on API
+# download the NCHS line-list files based on API
+# Date 2023.06.14
+# Yu Chen
+
 require(data.table)
 
 # read deaths data from https://www.nber.org/research/data/mortality-data-vital-statistics-nchs-multiple-cause-death-data

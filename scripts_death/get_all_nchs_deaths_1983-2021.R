@@ -1,4 +1,7 @@
-# Extract nchs individual level mortality data from 1983 to 2021 at the indivdiual level ----
+# Extract nchs individual level mortality data from 1983 to 2021 at the individual level ----
+# Preprocessing file for the NCHS mortality data
+# Date 2023.06.25
+# Yu Chen
 
 require(data.table)
 require(ggplot2)
@@ -564,6 +567,34 @@ for (path.input in list_file)
       saveRDS(df, file.path(args$out.dir, 'output', paste0('ICD-9_indv_code_allcause_deaths_', year.input, '.RDS')))
 
     }
+
+    if (0)
+    {
+      data <- list()
+      i = 0
+      for (year.input in 1983:1998)
+      {
+        i = i + 1
+        df <- as.data.table(readRDS(file.path(args$out.dir, 'output', paste0('ICD-9_indv_code_allcause_deaths_', year.input, '.RDS'))))
+        df <- df[, list(deaths = sum(deaths)),
+                 by = c('age', 'sex', 'year', 'state', 'cause.code', 'record_1', 'single.code', '282cause.code', 'race.eth')]
+        data[[i]] <- df
+
+      }
+      for (year.input in 1999:2021)
+      {
+        i = i + 1
+        df <- as.data.table(readRDS(file.path(args$out.dir, 'output', paste0('ICD-10_indv_code_allcause_deaths_', year.input, '.RDS'))))
+
+        df <- df[, list(deaths = sum(deaths)),
+                 by = c('age', 'sex', 'year', 'state', 'cause.code', 'single.code', 'race.eth')]
+        data[[i]] <- df
+
+      }
+      data.all <- data.table::rbindlist( data, use.names = T, fill = T)
+
+    }
+
     # further group the death data (same demographics as CDC WONDER data source)
     if (year.input < 1999)
     {

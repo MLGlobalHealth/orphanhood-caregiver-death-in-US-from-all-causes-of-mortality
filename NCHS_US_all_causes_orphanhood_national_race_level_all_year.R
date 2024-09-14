@@ -46,33 +46,41 @@ if (tmp["user"] == "yc2819" & grepl("hpc.ic.ac.uk",tmp["nodename"])) # outdir yu
   args$sample.type <- 'rep_mortality_poisson'
   args$v.name <- 'V0207'
 }
+args$v.name <- 'V0523'
+args$sample.type <- 'poisson_sampling_rnk'
+args$rep.nb <- 0
+rep.nb <- args$rep.nb
+set.seed(rep.nb)
 
+# Load the sampled data dir ----
 args$out.dir <- file.path(args$prj.dir, 'results')
 args$in.dir <- file.path(args$prj.dir, 'data')
-rep.nb <- args$rep.nb
-d.grandp.path <- file.path(args$in.dir, 'grandparents', paste0('rep_grandp-', rep.nb))
 
-# estimate the orphanhood by national race level
-if (!dir.exists(file.path(args$prj.dir, 'figures')))
-{
-  dir.create(file.path(args$prj.dir, 'figures'))
-}
+args$birth.data <- file.path(args$in.dir, args$sample.type, paste0('rep_id-', args$rep.nb))
+args$mort.data <- file.path(args$in.dir, args$sample.type, paste0('rep_id-', args$rep.nb))
+args$pop.data <- file.path(args$in.dir, args$sample.type, paste0('rep_id-', args$rep.nb))
 
-if (!dir.exists(file.path(args$prj.dir, 'results')))
-{
-  dir.create(file.path(args$prj.dir, 'results'))
-}
+mort.dir <- file.path(args$mort.data, 'rankable_cause_deaths_1983-2021.RDS')
+pop.dir <- file.path(args$pop.data, 'national_race_nchs-cdc_population_5yr_all.rds')
+birth.dir <- file.path(args$birth.data, 'national_race_nchs_births.rds')
+pop.harzard.dir <- file.path(args$pop.data, 'national_race_nchs-cdc_population_5yr_old_all.rds')
+
+v.name <- paste0(args$v.name, '-', basename(args$mort.data))
+
 # use another out.dir folder
 type.input <- 'national_race' # -- national level data
 folder.name <- 'children_nchs'
-args$mort.data <- file.path(args$in.dir, 'NCHS', args$sample.type, paste0('rep_id-', args$rep.nb))
-v.name <- paste0(args$v.name, '-', basename(args$mort.data))
 
 # v.name <- 'v0814' # add the version name in the results folder for the estimates output
 # create the folder for nb of children outputs
 if (!dir.exists(file.path(args$in.dir, 'data', folder.name)))
 {
   dir.create(file.path(args$in.dir, 'data', folder.name))
+}
+
+if (!dir.exists(file.path(args$prj.dir, 'figures')))
+{
+  dir.create(file.path(args$prj.dir, 'figures'))
 }
 
 if (!dir.exists(file.path(args$prj.dir, 'figures', folder.name)))
@@ -94,6 +102,8 @@ args$rep <- 0
 str(args)
 
 # Load the functions ----
+if (0)
+{
 source(file.path(args$prj.dir,"R","process_fertility.R"))
 source(file.path(args$prj.dir,"R","process_children_function.R"))
 source(file.path(args$prj.dir,"R","process_child_mortality.R"))
@@ -109,54 +119,80 @@ source(file.path(args$prj.dir,"R","calculate_caregiver_loss.R"))
 
 source(file.path(args$prj.dir,"R","saving_estimates.R"))
 source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
+}
+
+# source(file.path(args$prj.dir,"R","nchs_fertility_children.R"))
+# source(file.path(args$prj.dir,"R","nchs_adj_fertility_children.R"))
+source(file.path(args$prj.dir,"R","poisson_nchs_fertility_children.R"))
+source(file.path(args$prj.dir,"R","fertility_rate_rnk_poisson_noise.R"))
+source(file.path(args$prj.dir,"R","adj_fert_pipeline_function.R"))
+source(file.path(args$prj.dir,"R","calculate_caregiver_loss.R"))
+source(file.path(args$prj.dir,"R","double_orphans_estimation_rnk_poisson_noise.R"))
+source(file.path(args$prj.dir,"R","process_child_mortality.R"))
+
+
+# saving results
+source(file.path(args$prj.dir,"R","saving_estimates.R"))
+source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
+
+
+# Load the functions ----
+get_iter_estimates_historical_mortality <- function(prj.dir, raw.type, adj.v.name, v.name, rep.nb)
+{
+  sel.nb <- 'all'
+  # initial run
+  type.input <- paste0('CI_',raw.type, v.name)
+  if (!dir.exists(file.path(prj.dir, 'results', type.input)))
+  {
+    dir.create(file.path(prj.dir, 'results', type.input))
+  }
+  if (!dir.exists(file.path(prj.dir, 'results', type.input, 'initial_result')))
+  {
+    dir.create(file.path(prj.dir, 'results', type.input, 'initial_result'))
+  }
+
+  infile <- list.files(file.path(prj.dir, 'results', paste0(raw.type, adj.v.name)), pattern = paste0('cg_age_child_.*'), full.names = TRUE, recursive=F)
+  infiles <-  unlist(infile)
+
+  do <- list()
+  for (i in seq_len(length(infiles)))
+  {
+    infile <- infiles[i]
+    cat('Process',infile,'...\n')
+    yr <- gsub('.*?([0-9]+).*', '\\1', basename(infile))
+    do[[i]] <- as.data.table(read.csv(infile))
+    do[[i]][, cause.name := gsub(' \\(', '\n(', cause.name)]
+    do[[i]][, year := as.integer(yr)]
+  }
+
+  type.input <- file.path(type.input, 'initial_result')
+
+  do.national.disagg <- data.table::rbindlist( do, use.names = T, fill = T )
+  write.csv(do.national.disagg, file.path(prj.dir, 'results', type.input, paste0(rep.nb, '-hist_', raw.type, 'summary_cg_loss_age.csv')), row.names = F)
+}
+
 
 for (test.yr.input in 1983:2021)
 {
-
   args$yr.input <- test.yr.input
   cat('Now we are processing for year', args$yr.input, '...\n')
 
-
   # Run for the analysis ----
-  cat("\nRunning USA\n")
   # Prepare for the data
   cat("\nPreparing data\n")
   # extract all-causes death data
   cat('\nProcessing all cause of deaths ...\n')
 
-
-  # pre-processing the death counts
-  if (0)
-  {
-    cat(sprintf("Processing death data ...\n"))
-    if (!file.exists(file.path(args$in.dir, 'NCHS', args$sample.type, 'rep_id-1',
-                               'rankable_cause_deaths_1983-2021.RDS')))
-
-    {
-      source(file.path(args$prj.dir,"scripts_death","compare_code_mapping_update.R"))
-
-    }
-  }
-
-  #
-  type.input <- 'national_race'
   cat(sprintf("Processing number of children ...\n"))
-  # nchs.fertility_children.R
-  process_number_children_usa_state_national_all_year(args$in.dir, args$prj.dir, args$yr.input, type.input, rep.nb, folder.name)
-
-  cat(sprintf("Processing caregivers from the skip generations ...\n"))
-  # process_skip_generation.R updated to grandp_cg_age_function.R
-  # just consider the total number of grandparents loss, updated to grandp_household_total.R
-  set.seed(rep.nb)
-  process_usa_state_national_skip_generation_age_all_year_ACS_resample(args$in.dir, d.grandp.path, rep.nb, args$yr.input, type.input)
+  #
+  process_number_children_usa_national_race_all_year(args$in.dir, args$prj.dir, args$yr.input, type.input, pop.dir, birth.dir, folder.name)
 
   cat(sprintf("Load all year death counts ...\n"))
   # select the current year from the death file
 
   if (1)
   {
-    d.deaths <- as.data.table(readRDS(file.path(args$mort.data,
-                                                'rankable_cause_deaths_1983-2021.RDS')))
+    d.deaths <- as.data.table(readRDS(file.path(args$mort.data, 'rankable_cause_deaths_1983-2021.RDS')))
     d.death <- d.deaths[year == args$yr.input]
     d.death[, state := 'National']
     d.death <- d.death[, list(deaths = sum(deaths, na.rm = T)),
@@ -171,42 +207,28 @@ for (test.yr.input in 1983:2021)
 
   cat(sprintf("Processing number of orphans ...\n"))
   # orphans in a single one script: calculate_orphans
-  # update to use age distribution of children losing parents older than 30, by race, cause....
-  set.seed(rep.nb)
-  process_nb_orphans_table_state_national_all_year_v2(args$in.dir, args$prj.dir, args$yr.input, type.input, d.grandp.path, rep.nb, d.death, d.deaths.pre, args$sel.nb, args$if.smooth, v.name, folder.name)
-
+  process_nb_orphans_only_table_state_race_national_all_year_poission_rnk(args$in.dir, args$prj.dir, args$yr.input, type.input, d.death, d.deaths.pre, pop.harzard.dir, args$sel.nb, args$if.smooth, v.name, folder.name)
   cat('\nDone for year', args$yr.input, '...\n')
 }
 cat("Done for orphanhood and caregiver loss estimation by causes of deaths ...\n")
 
 # Saving estimates ----
-cat('Results are saved in folder ', file.path(args$prj.dir, 'results', paste0('CI_', type.input, '_', args$v.name)), 'initial_result')
-
-get_iter_estimates_historical_mortality_national_race(args$prj.dir, paste0(type.input, '_'), v.name, args$v.name, args$rep.nb)
+cat('Results are saved in folder ', file.path(args$prj.dir, 'results', paste0('CI_', type.input, '_', args$v.name), 'initial_result'))
+get_iter_estimates_historical_mortality(args$prj.dir, paste0(type.input, '_'), v.name, args$v.name, args$rep.nb)
 cat("Done for saving caregivers loss results ...\n")
-
-# update the age of grandchildren
-race.type <- 'national_race_'
-smy.type.input <- paste0('CI_', race.type, args$v.name)
-pry.cn <- get_leading_cause_national()
-get_grandp_loss_age_child(args$prj.dir, pry.cn$raw, smy.type.input, race.type, args$rep.nb)
-# cat("Done for updating grandparent caregivers loss by age of childre ...\n")
 
 # Clean repo ----
 cat("Deleting results folders to save space ...\n")
-unlink(file.path(args$prj.dir, 'results', smy.type.input, 'initial_result', '1-hist_national_race_summary_parent_loss_age.csv'), recursive = TRUE)
-unlink(file.path(args$prj.dir, 'results', smy.type.input, 'initial_result', '1-hist_national_race_summary_grandp_loss.csv'), recursive = TRUE)
+smy.type.input <- paste0('CI_', type.input, '_', args$v.name)
 
+# unlink(file.path(args$prj.dir, 'results', smy.type.input, 'initial_result'), recursive = TRUE)
 unlink(file.path(args$prj.dir, 'results', paste0(type.input, '_', v.name)), recursive = TRUE)
 unlink(file.path(args$prj.dir, 'results', paste0('orphans_', v.name)), recursive = TRUE)
 #
-cat("Renaming the updated results to initial_result folder ...\n")
-if (args$sample.type == 'rep_mortality_poisson')
-{
-  file.rename(file.path(args$prj.dir, 'results', smy.type.input),
-              file.path(args$prj.dir, 'results', paste0('CI_', type.input, '_poisson_', args$v.name)))
-}
+file.rename(file.path(args$prj.dir, 'results', smy.type.input),
+            file.path(args$prj.dir, 'results', paste0('CI_', type.input, '_', args$sample.type, '_', args$v.name)))
 #
+
 cat("Deleting the processed data to save space ...\n")
 {
   unlink(file.path(args$in.dir, 'data', 'fertility/*.csv'))
@@ -216,5 +238,3 @@ cat("Deleting the processed data to save space ...\n")
 }
 gc()
 cat("Done!\n")
-
-

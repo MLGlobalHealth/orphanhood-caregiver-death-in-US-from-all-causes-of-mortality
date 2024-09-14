@@ -1,9 +1,11 @@
 # other useful plots for paper ----
-# For Fig.S15
+# For EDF7
 args <- list()
 args$prj.dir <- here::here()
 
-# 1010  compare the mortality data between two data source, only at the national level
+# 231010  compare the mortality data between two data source, only at the national level
+# clean the script 240830
+
 # Load functions
 source(file.path(args$prj.dir,"R","extract_leading_causes_deaths_state_cdc.R"))
 source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
@@ -11,31 +13,17 @@ source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
 # mortality data check ----
 # Load data at national level
 # adjusted by the comparability ratio
-# raw, un-attributed mort data
-#
-# d.deaths.nchs <- as.data.table(readRDS(file.path(args$prj.dir, 'data', 'NCHS', paste0('rep_mortality_fntwk/rep_id-1'),
-#                                                  'rankable_cause_deaths_1983-2021_raw_state_raceth.RDS')))
-#
+# raw, un-resampled mort data
 d.deaths.nchs <- as.data.table(readRDS(file.path(args$prj.dir, 'data', 'NCHS', paste0('rep_mortality_poisson/rep_id-1'),
                                                  'rankable_cause_deaths_1983-2021_raw_state_raceth.RDS')))
+d.deaths.nchs <- as.data.table(readRDS(file.path(args$prj.dir, 'data', paste0('poisson_sampling_rnk/rep_id-0'),
+                                                 'rankable_cause_deaths_1983-2021.RDS')))
 
-# rankable_cause_deaths_1983-2021_raw_state_raceth.RDS
-#. used the raw data
-# d.deaths.cdc <- as.data.table(read.csv(file.path('/Users/yu/Library/CloudStorage/OneDrive-ImperialCollegeLondon/Mac/YY_Mac/US_all_causes_deaths',
-#                                                  'data', 'CDC', 'ICD-10_113_Cause', 'US_state_no_race',
-#                                                  'national_leading-allcauses_1999-2022.csv')))
-
+# if no such file:
+# please run function
 d.deaths.cdc <- as.data.table(read.csv(file.path(args$prj.dir,
                                                  'data', 'CDC', 'ICD-10_113_Cause', 'US_state_no_race',
                                                  'national_leading-allcauses_1999-2022.csv')))
-
-
-sum(d.deaths.nchs[year > 1999]$deaths)
-# sum(d.nchs[year > 1999]$deaths)
-
-unique(d.deaths.cdc$age)
-sum(d.deaths.cdc[year > 1999]$deaths)
-
 unique(d.deaths.cdc$cause.name)
 unique(d.deaths.nchs$cause.name)
 
@@ -124,7 +112,7 @@ cn.rk <- tmp$cn
 tmpp[, fac.name := paste0(cause.name, '\n', sex)]
 unique(tmpp$fac.name)
 
-# Convert to a table ----
+# [Table S15] Convert to a table ----
 # could be similar to Tab1, select some key yrs
 # please convert this figure into one or two supplementary tables,
 # showing in rows years and in columns cause/sex.
@@ -164,8 +152,10 @@ tmpp.tab[grepl('CDC', data_source), year := NA]
 capture.output(print(xtable::xtable(tmpp.tab[, 1:10]), include.rownames=FALSE), file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp1.txt'))
 capture.output(print(xtable::xtable(tmpp.tab[, c(1:2, 17:18, 15:16, 11:12, 13:14)]), include.rownames=FALSE), file = file.path(args$prj.dir, 'results', 'data_paper', 'edf_tab_sens_analy_mort_comp2.txt'))
 
-
+# add 0 counts for COVID19
+tmpp[, ]
 #
+
 p1 <- ggplot(tmpp, aes(x = year, y = value, col = factor(variable, levels = var.name), size = variable, shape = variable, fill = variable)) +
   geom_point() +
   facet_wrap(factor(fac.name, levels = unique(tmpp$fac.name))~. ,
@@ -320,18 +310,3 @@ saveRDS(tmpp2, file.path(args$prj.dir, 'results', 'data_paper', 'sens_analy_birt
 tmpp[supp.rate < 0]
 
 cat('Done!\n')
-if (0)
-{
-  # raw data: without age cut of fathers
-  dt <- merge(d.births.cdc, d.births.nchs.raw, by = c('age', 'year', 'sex'), all = T)
-  dt <- dt[year %in% 2005:2021 & age != '0-14' & age != '50+']
-  dt <- dt[!is.na(births.cdc)]
-  tmpp = dt[, list(nchs = sum(births.nchs, na.rm = T),
-                   cdc = sum(births.cdc, na.rm = T)),
-            by = c('year', 'sex')]
-
-  tmpp
-  tmpp[, supp.rate := abs(nchs - cdc)/nchs]
-  tmpp2 <- tmpp[year %in% 2005:2021, max(supp.rate)*100, by = 'sex']
-  saveRDS(tmpp2, file.path(args$prj.dir, 'results', 'data_paper', 'sens_analy_births_comp_wo_cut_state.rds'))
-}

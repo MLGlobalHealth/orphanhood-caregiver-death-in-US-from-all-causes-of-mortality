@@ -1,5 +1,7 @@
 # Extract nchs individual level mortality data of children from 1983 to 2021 by single age ----
-# 240710 to adjust the prevalence rate
+# Aims to adjust the prevalence rate including the child mortality rates
+# 2024.07.10
+# Yu Chen
 
 require(data.table)
 require(ggplot2)
@@ -107,6 +109,12 @@ extract_nchs_child_data <- function(path.input)
   return(df)
 }
 
+state_code_transfer_table_nchs <- function()
+{
+  tmp <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'US_state_code.csv')))
+  return(tmp)
+}
+
 age_detailed_code <- function(df)
 {
   # for code ager52
@@ -122,6 +130,33 @@ age_detailed_code <- function(df)
   df[, rep.age := as.integer(rep.age)]
   # detailed age were coded in 3 digits before 1999; coded in 4 digits after 1999
   df[is.na(age), age := ifelse(rep.age > 1e3, rep.age - 1e3, rep.age - 1e2)]
+  print(unique(df$age))
+  return(df)
+}
+
+# for year with age code in 3 digits
+age_detailed_code_3digits <- function(df.raw)
+{
+  # for code ager52
+  # 1:22 --> 0 year
+  # 23 -- 1 year
+  # 29 -- 15-19 years
+  # for detailed age
+  # 1xxx or 1xx means the single year age xxx or xx
+  # after year 2005, 1xxx, need to check 1xx (three digits)
+  df <- copy(df.raw)
+  unique(df$age.code)
+  unique(df$age)
+  # < 1years
+  df[age.code < 23, unique(age)]
+  # 1-19
+  df[age.code %in% 24:29, unique(age)]
+  df <- df[age.code < 30]
+  df[age.code < 23, age := 0]
+  unique(df$age)
+  # setnames(df, 'age', 'rep.age')
+  #
+  # df[, rep.age := as.integer(rep.age)]
   print(unique(df$age))
   return(df)
 }
@@ -404,16 +439,25 @@ deaths_data <- list()
 i <- 0
 
 data <- list()
-for (path.input in list_file[23:39])
+for (path.input in list_file)
 {
   # year 2005 i = 23
   # path.input <- list_file[23]
+  # path.input <- list_file[13]
   year.input <- as.integer(gsub(".*?([0-9]+).*", "\\1", basename(path.input)))
   i <- i + 1
   if (year.input >= 1983)
   {
     df <- extract_nchs_child_data(path.input)
-    df <- age_detailed_code(df)
+
+    # age: in previous years, the detailed ages are coded in 3 digits
+    # so we used the different approaches to process the age information
+    if (max(df$age) > 1e3)
+    {
+      df <- age_detailed_code(df)
+    }else{
+      df <- age_detailed_code_3digits(df)
+    }
     df <- df[age < 18]
     year.input <- unique(df$year)
 
@@ -516,5 +560,5 @@ data.all <- data.table::rbindlist( data, use.names = T, fill = T)
 
 rm(data)
 cat('\nSaving the NCHS single code list cause death code file ...\n')
-saveRDS(data.all, file.path(args$out.dir, 'output', paste0('NCHS_deaths_children_2005-2021.RDS')))
+saveRDS(data.all, file.path(args$out.dir, 'output', paste0('NCHS_deaths_children_1983-2021.RDS')))
 gc()

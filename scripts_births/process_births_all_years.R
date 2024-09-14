@@ -509,8 +509,7 @@ state_code_transfer_table_nchs <- function()
 
 
 # Run for NCHS individual level dataset ----
-list_file <- list.files(args$out.dir, '.RDS', full.names = TRUE )
-
+list_file <- list.files( args$out.dir, '.RDS', full.names = TRUE )
 list_file <- sort(list_file)
 cat('There are in total ', length(list_file), ' files ... \n')
 deaths_data <- list()

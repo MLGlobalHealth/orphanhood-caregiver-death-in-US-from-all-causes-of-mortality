@@ -1,8 +1,8 @@
 # This script aims to compare the estimates for the sensitivity analysis part ----
-# 0804 results finish first draft SM
-# 1015 update results based on rep_nb mort data 1
+# 230804 results finish first draft SM
+# 231015 update results based on rep_nb mort data 1
 
-# 240516 update figures for the EXT
+# 240516 update figures for the EDF
 require(data.table)
 require(ggplot2)
 args <- list()
@@ -13,161 +13,12 @@ source(file.path(args$prj.dir,"R","saving_estimates.R"))
 source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
 source(file.path(args$prj.dir,"R","sensitivity_figures_function.R"))
 
-# Sensitivity analysis fertility rates----
-# Load the estimates in the main text
-# w.r.t rep_nb 0
-# race.type <- 'national_race_fert_stable_poisson_sampling_rnk_1e4_'
-# do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V0526_basline_run'), 'initial_result', paste0('0-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
-race.type <- 'national_race_fert_stable_poisson_'
-do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V0214'), 'initial_result', paste0('1-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
-
-# Load the estimates in the sensitivity analysis
-race.type <- 'national_race_poisson_'
-do.fert.alter <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, 'V0207'), 'initial_result', paste0('1-hist_national_race_summary_cg_loss_age.csv'))))
-
-# deviation orphanhood estimates deviated by up to $\pm XYZ\%$ of the central estimate,
-# and identified minor sensitivities to national orphanhood prevalence estimates up to 2006
-tmp <- merge(do.main[, list(cause.name,state,race.eth,year,child.age,orphans)], do.fert.alter[, list(cause.name,state,race.eth,year,child.age,orphans)],
-             by = c('cause.name','state','race.eth','year','child.age'), all = T)
-tmp <- tmp[, list(main.orphans= sum(orphans.x, na.rm = T),
-           alter.orphans = sum(orphans.y, na.rm = T)),
-    by = c('state','year')]
-tmp[, dev := abs(alter.orphans - main.orphans)/main.orphans]
-tmpp <- tmp[,max(dev)*100]
-saveRDS(tmpp, file.path(args$prj.dir, 'results', 'data_paper', 'sens_analy_fert_rate_comp.rds'))
-
-# prevalence
-do.main.tmp <- race_prevl_f2b(do.main)
-do.fert.alter.tmp <- race_prevl_f2b(do.fert.alter)
-tmp <- rbind(do.main.tmp[, type := 'Main method'], do.fert.alter.tmp[, type := 'Alternative method'])
-tmp[, type := factor(type, levels = c('Main method', 'Alternative method'))]
-setkey(tmp, race.eth, type)
-row.title <- paste0("Rate of cumulative burden of\nparental death per 100 children")
-
-# [EDF 9a sen related plot] ----
-  # whole US.
-  # show the total burden for all causes by age of children
-# Keep pb only
-# Combine figure from script misc_sen_analyse_adj_fert_rates_0516.R
-pb <- generate_edf9a(tmp)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_senanaly1_F2b_preval_rates_orphans_race.png')), pb,  w = 8, h = 12, dpi = 310, limitsize = FALSE)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_senanaly1_F2b_preval_rates_orphans_race.pdf')), pb,  w = 8, h = 12, dpi = 310, limitsize = FALSE)
-
-# [Supp figure S3] race contribution
-cat('Processing for supp fig3 ...\n')
-pop.cdc <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'data', 'pop', 'national_race_usa_population_all.csv')))
-# impute for the population sizes by race. now we use the Gaussian processes to get the estimated population sizes before 1990 by race
-# compare the cdc and nchs national pop
-pop.cdc <- pop.cdc[year >= 1990]
-pop.cdc <- pop.cdc[race.eth != 'Others']
-y.input <- pop.cdc[year %in% 1990:2021]
-unique(y.input$race.eth)
-y.input[age.cat %in% c("55-59", "60-64", "65-69",
-                   "70-74", "75-79", "80-84", "85+"), age.cat := '55+']
-y.input <- y.input[, list(population = sum(population, na.rm = T)),
-                     by = c('state', 'year', 'sex', 'age.cat', 'race.eth')]
-
-y.input.t <- y.input[, list(pop = sum(population, na.rm = T)),
-                     by = c('state', 'year', 'sex', 'age.cat')]
-y.input <- merge(y.input, y.input.t, by = c('state', 'year', 'sex', 'age.cat'), all.x = T)
-y.input <- y.input[age.cat != '0-14']
-y.input[, prop := population / pop]
-y.input$race.eth <- factor(y.input$race.eth,
-                           levels = c("Hispanic" ,
-                                      "Non-Hispanic American Indian or Alaska Native",
-                                      "Non-Hispanic Asian" ,
-                                      "Non-Hispanic Black" ,
-                                      "Non-Hispanic White"
-                                      # , 'Others'
-                           ))
-y.input[, sex := factor(sex, levels = c('Male', 'Female'))]
-# jco
-col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "#D3D3D3"
-              # , '#4A6990FF'
-              )
-y.input <- update_facet_sex(y.input)
-if (0)
-{
-pa.f <- ggplot(y.input[!(age.cat %in% c('50-54', '55+')) & sex == 'Women'], aes(x = year, y = prop, fill = race.eth)) +
-  geom_bar(stat = 'identity') +
-  facet_wrap(. ~ paste0('Women\n',age.cat, ' years'), ncol = 5) +
-  scale_fill_manual(values = col.race, drop = T) +
-  # scale_x_discrete(breaks = seq(min(pd$year), max(pd$year), 5)) +
-  scale_y_continuous(limits = c(0, NA),
-                     labels = scales::percent,
-                     expand = expansion(mult = c(0, 0.01))) +
-  # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
-  theme_bw() +
-  xlab('') +
-  ylab('Contribution of standardized race & ethnicity to U.S. population sizes') +
-  labs(fill = 'Standardized race & ethnicity') +
-  guides(fill = guide_legend(
-    title.position="top", title.hjust = 0.5,
-                             nrow = 3)) +
-  theme(legend.position = "bottom",
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size=13, family='sans'),
-        text=element_text(size=16,family='sans'),
-        legend.title=element_text(size=15, family='sans'),
-        legend.text=element_text(size=13, family='sans'),
-        legend.key.size = unit(16, 'pt'),
-        strip.text = element_text(size = 16),
-        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
-
-        panel.background = element_blank(),
-        strip.background = element_blank()
-  )
-pa.m <- ggplot(y.input[ sex == 'Men'], aes(x = year, y = prop, fill = race.eth)) +
-  geom_bar(stat = 'identity') +
-  facet_wrap(. ~ paste0('Men\n',age.cat, ' years'), ncol = 5) +
-  scale_fill_manual(values = col.race, drop = T) +
-  # scale_x_discrete(breaks = seq(min(pd$year), max(pd$year), 5)) +
-  scale_y_continuous(limits = c(0, NA),
-                     labels = scales::percent,
-                     expand = expansion(mult = c(0, 0.01))) +
-  # facet_wrap(.~factor(cause.name, cn), nrow = 1, scales = 'free') +
-  theme_bw() +
-  xlab('') +
-  ylab('Contribution of standardized race & ethnicity to U.S. population sizes') +
-  labs(fill = 'Standardized race & ethnicity') +
-  guides(fill = guide_legend(
-    title.position="top", title.hjust = 0.5,
-    nrow = 3)) +
-  theme(legend.position = "bottom",
-        axis.title = element_text(size = 16),
-        axis.text = element_text(size=13, family='sans'),
-        text=element_text(size=16,family='sans'),
-        legend.title=element_text(size=15, family='sans'),
-        legend.text=element_text(size=13, family='sans'),
-        legend.key.size = unit(16, 'pt'),
-        strip.text = element_text(size = 16),
-        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size=13, family='sans'),
-
-        panel.background = element_blank(),
-        strip.background = element_blank()
-  )
-
-pa.f
-pa <- ggpubr::ggarrange(pa.m, pa.f, ncol = 1,
-                       labels = c('', ''),
-                       align = 'v',
-                        common.legend = T, legend = 'bottom'
-)
-p <- ggpubr::ggarrange(pa, pb, nrow = 1,
-                       labels = c('A', 'B'),
-                       widths = c(2,1.8)
-
-)
-
-p
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_to_national_historic_fertility_rates.png')), p, w = 18, h = 13, dpi = 310, limitsize = FALSE)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_to_national_historic_fertility_rates.pdf')), p, w = 18, h = 13, dpi = 310, limitsize = FALSE)
-}
-# Sensitivity analysis grandp EDF10d-e----
+# Sensitivity analysis grandparents ----
 # only compare the age dist not for the incidence or prevalence
 # get the grandp total loss data
 # disagg without cause.names
 
+# specify the result name
 race.type <- 'CI_national_race_fert_stable_poisson_sampling_rnk_1e4_'
 v.name <- 'V0526_basline_run'
 do.grandp <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0( race.type, v.name), 'sep_result', '0-hist_national_race_fert_stable_summary_grandp_loss.csv')))
@@ -215,9 +66,9 @@ if (1)
                                                 ifelse(cause.name == 'Drug overdose', 'Drug poisonings', cause.name))))]
   }
 
+  # Central analysis
   if (1)
   {
-    # Central analysis
     # select parents dying from Drug overdose
     dist.age <- copy(do.par)
     setnames(dist.age, 'child_age', 'child.age')
@@ -233,12 +84,11 @@ if (1)
     dist.age[is.na(prop)]
     dist.age <- dist.age[!is.na(prop)]
     set(dist.age, NULL, c('orphans', 'value.t'), NULL)
-
-
   }
+
+  # Sensitivity analysis
   if (1)
   {
-    # Sensitivity analysis
     do.par.sen <- copy(do.par)
     setnames(do.par.sen, 'child_age', 'child.age')
 
@@ -252,12 +102,12 @@ if (1)
     do.par.sen <- do.par.sen[!is.na(prop)]
     set(do.par.sen, NULL, c('orphans', 'value.t'), NULL)
   }
+
+  # NSCH survey
   if (1)
   {
-    # NSCH survey from script R/age_child_grandp_comp.R
+    # preprocess for the NSCH data
     copy_combine_grandp_child_age_state_national('national_race', file.path(args$prj.dir, 'data'))
-
-
     nsch <- as.data.table(read.csv(file.path(args$prj.dir, 'data', 'grandparents', 'age_prop_child_grandp_nsch_survey_national_race_raw.csv')))
     nsch[, sex := gender]
 
@@ -278,29 +128,6 @@ if (1)
     # nsch <- rbind(nsch, tp, use.names = T, fill = T)
 
   }
-  tp.all <- rbind(dist.age[, variable := 'Central analysis'],
-                  do.par.sen[, variable := 'Sensitivity analysis on age composition of grandchildren\nbased on age composition of children experiencing orphanhood\nregardless of cause-of-death'],
-                  nsch[, variable := 'Sensitivity analysis on age composition of grandchildren\nbased on NSCH data'],
-                   use.names = T, fill = T)
-  tp.all <- tp.all[race.eth != 'Others']
-  tp.all[grepl(' or', race.eth), race.eth := gsub(' or', '\nor', race.eth)]
-  '-Hispanic '
-  tp.all[grepl('-Hispanic ', race.eth), race.eth := gsub('-Hispanic ', '-Hispanic\n', race.eth)]
-
-  tp.all$race.eth <- factor(tp.all$race.eth,
-                            levels = c("Hispanic" ,
-                                       "Non-Hispanic\nAmerican Indian\nor Alaska Native",
-                                       "Non-Hispanic\nAsian" ,
-                                       "Non-Hispanic\nBlack" ,
-                                       "Non-Hispanic\nWhite"
-                                       ))
-    # col.race <- c("#D49464FF", "#00A1D5FF", "#B24745FF", "#374E55FF", "#79AF97FF",  "red", "#ADB6B6FF")
-    tp.all <- update_facet_sex(tp.all)
-
-    # EDF10a-----
-    p10a <- generate_edf10a(tp.all)
-
-
   }
 
 if (!dir.exists(file.path(args$prj.dir, 'results', paste0(race.type, v.name), 'sen_result')))
@@ -311,9 +138,12 @@ if (!dir.exists(file.path(args$prj.dir, 'results', paste0(race.type, v.name), 's
 ##
 
 dt.grand[, sex := gender]
-dt.wo.cause <- disagg_grand_loss_age_child(args$prj.dir, do.par.sen, dt.grand, dt.all, paste0(race.type, v.name), race.type)
-dt.nsch <- disagg_grand_loss_age_child(args$prj.dir, nsch[, state := 'National'], dt.grand, dt.all, paste0(race.type, v.name), race.type)
-dt.drug <- disagg_grand_loss_age_child(args$prj.dir, dist.age, dt.grand, dt.all, paste0(race.type, v.name), race.type)
+do.par.sen.save <- copy(do.par.sen)
+dt.grand.save <- copy(dt.grand)
+dt.all.save <- copy(dt.all)
+dt.wo.cause <- disagg_grand_loss_age_child(args$prj.dir, do.par.sen.save, dt.grand.save, dt.all.save, paste0(race.type, v.name), race.type)
+dt.nsch <- disagg_grand_loss_age_child(args$prj.dir, nsch[, state := 'National'], dt.grand.save, dt.all.save, paste0(race.type, v.name), race.type)
+dt.drug <- disagg_grand_loss_age_child(args$prj.dir, dist.age, dt.grand.save, dt.all.save, paste0(race.type, v.name), race.type)
 
 #
 tmp <- rbind(dt.drug[, variable := 'Central analysis'],
@@ -336,17 +166,16 @@ if (0)
   summary(tmp2$diff)
 }
 ##
-# Check the incidence numebr
+
 if (1)
 {
-  # [EDF10 B]  <- lot the incidence of grandp loss ----
   tmp.save[, age.group := ifelse(child.age %in% 0:4, '0-4',
                             ifelse(child.age %in% 5:9, '5-9', '10-17'))]
   unique(tmp.save$variable)
   tmp2 <- tmp.save[, list(value = sum(grandp.loss, na.rm = T)),
               by = c('year', 'variable', 'age.group')]
 
-  # States for paper ----
+  # States for paper
   if (1)
   {
     # In the sensitivity analyses, we found that
@@ -395,14 +224,10 @@ if (1)
 
   }
 
-  # EDF10B ----
+  # EDF10d ----
   psen <- generate_edf10b(tmp2)
-#
-#   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_age2_distrib_children_losing_grandparents_incid.png')), psen, w = 10, h = 13, dpi = 310, limitsize = FALSE)
-#   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_age2_distrib_children_losing_grandparents_incid.pdf')), psen, w = 10, h = 13, dpi = 310, limitsize = FALSE)
 
-
-  #[edf10 c] ----
+  # EDF10e ----
   tmp2 <- tmp.save[, list(value = sum(cg.loss, na.rm = T)),
               by = c('year', 'variable', 'age.group')]
 
@@ -454,13 +279,8 @@ if (1)
   }
 
   psen.all <- generate_edf10c(tmp2)
-  # ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_age2_distrib_children_losing_all_incid.png')), psen2, w = 8, h = 13, dpi = 310, limitsize = FALSE)
-  # ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf_sens_age2_distrib_children_losing_all_incid.pdf')), psen2, w = 8, h = 13, dpi = 310, limitsize = FALSE)
 
   # combine
-  psen <- psen + theme(legend.position = 'none')
-  psen.all <- psen.all + theme(legend.position = 'none')
-
   psen.both <- ggpubr::ggarrange(psen, psen.all, nrow = 1,
                           labels = c( 'd', 'e'), common.legend = T,
                           legend = 'bottom',
@@ -468,8 +288,4 @@ if (1)
                           widths = c(1,1))
   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf10_de.png')), psen.both, w = 16, h = 8, dpi = 310, limitsize = FALSE)
   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf10_de.pdf')), psen.both, w = 16, h = 8, dpi = 310, limitsize = FALSE)
-#
-#   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf10_a.png')), p10a, w = 10, h = 16, dpi = 310, limitsize = FALSE)
-#   ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf10_a.pdf')), p10a, w = 10, h = 16, dpi = 310, limitsize = FALSE)
-#
 }

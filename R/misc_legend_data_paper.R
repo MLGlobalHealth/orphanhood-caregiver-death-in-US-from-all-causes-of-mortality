@@ -102,91 +102,6 @@ tmp.drug <- merge(c.pop.all, tmp.drug, by = c('year'))
 tmp.drug[, rate := output/population*1e2]
 tmp.drug[year %in% c(2000, 2012, 2019, 2021) & stat == 'M']
 
-# for the reporting summary: % excluded from the study ----
-if (0)
-{
-  # for paper stats: Others race & ethnicity ratio
-  # Note use the data wihout poisson noise
-  # rep.nb = 0
-  d.deaths <- as.data.table(readRDS(file.path(args$prj.dir, 'data/poisson_sampling_rnk/rep_id-0', 'rankable_cause_deaths_1983-2021.RDS')))
-
-  tp1 <- d.deaths[race.eth == 'Others', list(deaths.other = sum(deaths, na.rm = T)),
-                  by = c('year')]
-  tp2 <- d.deaths[, list(deaths.all = sum(deaths, na.rm = T)),
-                  by = c('year')]
-  tp1 <- merge(tp1, tp2, by = c('year'), all = T)
-  tp1[is.na( deaths.other ),  deaths.other := 0]
-  tp1 <- tp1[year %in% 1984:2021, list(deaths.all = sum(deaths.all, na.rm = T),
-                                       deaths.other = sum(deaths.other, na.rm = T))]
-  tp1[, others.ratio := deaths.other/deaths.all * 100]
-  # 17,454 0.019%
-
-  # natality
-  data.all <- readRDS(file.path(args$prj.dir, 'data', 'NCHS', 'births', 'output', paste0('births_1968-2021.RDS')))
-  data.all[, age := father.age %/% 5]
-  data.all[, age := paste0( age * 5, '-' , (age + 1) * 5 - 1)]
-  data.all[, age := ifelse(age %in% c('0-4', '5-9', '10-14'), '0-14',
-                           ifelse(father.age >= 55, '55+', age))]
-
-
-  data.all[is.na(father.5yr.age), father.5yr.age := age]
-  set(data.all, NULL, 'age', NULL)
-
-  data.all.t.mother <- data.all[, list(births = sum(births, na.rm = T)),
-                                by = c('year', 'mother.race.eth', 'mother.5yr.age')]
-  # due to the abnormal data in year 1989, we cut the age of fathers at 77
-  # add for year 2004+ some people just reported their single age or combined age
-  data.cut <-  data.all[(father.age >= 78), sel := F]
-  data.cut <- data.cut[(mother.age >= 50), sel := F]
-  data.cut[, table(sel)]
-
-  # out age ranges
-  tp1 <- data.cut[sel == F, list(deaths.other = sum(births, na.rm = T)),
-                  by = c('year')]
-  tp2 <- data.cut[, list(deaths.all = sum(births, na.rm = T)),
-                  by = c('year')]
-  tp1 <- merge(tp1, tp2, by = c('year'), all = T)
-  tp1[is.na( deaths.other ),  deaths.other := 0]
-  tp1[, others.ratio := deaths.other/deaths.all * 100]
-  tp1[year == 2021]
-  tp1
-  tp1[year %in% 1978:2021, mean(others.ratio)]
-
-  tp1 <- tp1[year %in% 1978:2021, list(deaths.all = sum(deaths.all, na.rm = T),
-                                       deaths.other = sum(deaths.other, na.rm = T))]
-  tp1[, others.ratio := deaths.other/deaths.all * 100]
-  tp1
-  # 0.011 19367
-  # 320174512
-
-  # race/age/unreported...
-  data.all$race.eth <- factor(data.all$mother.race.eth,
-                                levels = c("Hispanic" ,
-                                           "Non-Hispanic American Indian or Alaska Native",
-                                           "Non-Hispanic Asian" ,
-                                           "Non-Hispanic Black" ,
-                                           "Non-Hispanic White",
-                                           "Others"
-                                ))
-  tp1 <- data.all[race.eth == 'Others', list(deaths.other = sum(births, na.rm = T)),
-                  by = c('year')]
-  tp2 <- data.all[, list(deaths.all = sum(births, na.rm = T)),
-                  by = c('year')]
-  tp1 <- merge(tp1, tp2, by = c('year'), all = T)
-  tp1[is.na( deaths.other ),  deaths.other := 0]
-  tp1[, others.ratio := deaths.other/deaths.all * 100]
-  tp1[year == 2021]
-  tp1
-  tp1[year %in% 1978:2021, mean(others.ratio)]
-
-  tp1 <- tp1[year %in% 1978:2021, list(deaths.all = sum(deaths.all, na.rm = T),
-                                       deaths.other = sum(deaths.other, na.rm = T))]
-  tp1[, others.ratio := deaths.other/deaths.all * 100]
-  tp1
-
-
-}
-
 # -----
 # Data in Figure Legend ----
 # national level (Fig 1) ----
@@ -396,10 +311,6 @@ mort.data.simp <- as.data.table(readRDS(file.path(args$prj.dir, 'data', 'poisson
 
 
 unique(mort.data.simp$cause.name)
-# tmp <- mort.data.simp[year %in% 2000:2021, list(deaths.ttl = sum(deaths, na.rm = T)), by = 'year']
-# min(tmp$deaths.ttl)
-# pry.cause <- get_leading_cause_state()
-# tmp <- mort.data.simp[cause.name %in% c(pry.cause$raw)]
 tmp <- mort.data.simp[year %in% 2021 & cause.name != 'Others']
 unique(tmp$cause.name)
 tmp <- tmp[year %in% 2021, list(deaths.ttl = sum(deaths, na.rm = T)),

@@ -33,9 +33,7 @@ process_usa_states_national_race_stable_fertility_imput_all_year_poisson_rnk <- 
 # the central analysis: stable fert rate before 1990
 process_usa_states_national_race_birth_fertility_all_year_imputation_poisson_rnk <- function(in.dir, type.input, pop.dir, birth.dir)
 {
-  # type.input = 'state'
-  # type.input = 'national'
-  # type.input = 'national_race'
+  # national level: type.input to specify the saved
 
   # load the pop data
   cat("Loading Population data ...\n")
@@ -54,8 +52,16 @@ process_usa_states_national_race_birth_fertility_all_year_imputation_poisson_rnk
   # update: 0728
   # year from 1966 to get the incidence from 2000
 
-  fer <- merge(data.all.t, pop, by.x = c('year', 'age', 'sex', 'race.eth'),
-               by.y = c('year', 'age.cat', 'sex', 'race.eth'), all.x = T)
+  if ('state' %in% colnames(pop) & 'state' %in% colnames(data.all.t))
+  {
+    # only applied to rep-id 0
+    fer <- merge(data.all.t, pop, by.x = c('year', 'age', 'sex', 'race.eth', 'state', 'idx'),
+                 by.y = c('year', 'age.cat', 'sex', 'race.eth', 'state', 'idx'), all.x = T)
+  }else{
+    fer <- merge(data.all.t, pop, by.x = c('year', 'age', 'sex', 'race.eth'),
+                 by.y = c('year', 'age.cat', 'sex', 'race.eth'), all.x = T)
+  }
+
   if (!('births' %in% colnames(fer)))
   {
         fer[, births := births_rnk]
@@ -1020,6 +1026,7 @@ process_usa_states_race_birth_comp_poisson_rnk <- function(prj.dir, in.dir, stat
     tmp.plt <- merge(tmp.plt, tmp.plt2, by = c('state', 'year', 'race.eth', 'sex'), all = T)
     tmp.plt <- tmp.plt[sex == 'Female' & year %in% 1995:2019 & race.eth != 'Others']
 
+    # EDF9b ----
     p <- plot_nchs_cdc_state_race_births_raceeth_comp(tmp.plt)
     ggsave(file.path(prj.dir, 'results', 'figs', paste0('edf_births_cdc_nchs_state_race_data_adj_comp_update.png')), p, w = 16, h = 10, dpi = 310, limitsize = FALSE)
     ggsave(file.path(prj.dir, 'results', 'figs', paste0('edf_births_cdc_nchs_state_race_data_adj_comp_update.pdf')), p, w = 16, h = 10, dpi = 310, limitsize = FALSE)

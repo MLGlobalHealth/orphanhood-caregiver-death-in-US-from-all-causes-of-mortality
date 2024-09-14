@@ -1,13 +1,22 @@
+# This script aims to do comparison between the main analysis and the sensitivity analyses
+# in terms of the assumptions on fertility rates
+# EDF postprocessing
+
+# Sensitivity analysis fertility rates ----
+
 # new request from CDC
 # 231129
 # sensitivity analysis on the fertility rates
 # add an adjustment on the year back to live
-# if parents are close to death (unhealthy), the fertility rates would be smaller than the
-# real ones
 
-# EDF 9b-c
+# Scenario:
+# if parents are close to death (unhealthy), the fertility rates would be smaller than the real ones
+#
+
+# Generating EDF 10a-c
 require(data.table)
 require(ggplot2)
+require(tidyverse)
 # we assume adjustments on the fertility rates from a logistic model
 # (0.5, 1)
 # (0, 1)
@@ -15,6 +24,7 @@ require(ggplot2)
 # (0, 3)
 # four models to compare
 # assume the scale parameter is  .1*span
+# Four analyses on backward fert rates ----
 x <- seq(0, 5, 0.01)
 df <- data.table(x = x,
                  y0 = rep(1, length(x)),
@@ -34,6 +44,9 @@ sen.name <- c('Sensitivity analysis 1', 'Sensitivity analysis 2', 'Sensitivity a
 colnames(df)[2:6] <- c('Central analysis', sen.name)
 
 df <- as.data.table(reshape2::melt(data = df, id = 'x'))
+
+# [EDF10c] ----
+# downwards adjustment
 p1 <- ggplot(df, aes(x = x, y = value, linetype = variable, linewidth = variable,  col = variable)) +
   geom_line() +
   theme_bw() +
@@ -43,10 +56,6 @@ p1 <- ggplot(df, aes(x = x, y = value, linetype = variable, linewidth = variable
   ) +
   scale_linetype_manual(values = c(1, 3, 6, 2, 4)) +
   scale_linewidth_manual(values = 2*c(.4, 1, .4, .6, .6), drop = T) +
-
-  # scale_linetype_manual(values = c(1, 2, 3, 4, 6)) +
-  # scale_linewidth_manual(values = 2*c(.4, .6, 1, 0.6, 0.4), drop = T) +
-
   scale_y_continuous(limits = c(0, NA),
                      labels = scales::comma,
                      expand = expansion(mult = c(0, 0.01))) +
@@ -67,36 +76,38 @@ p1 <- ggplot(df, aes(x = x, y = value, linetype = variable, linewidth = variable
 
         strip.background = element_blank()
   )
+p1 <- p1 + theme(legend.position = 'none')
+p1 <- p1 + ggsci::scale_color_npg()
 
-# prevalence rate comparison
+# Prevalence rate comparison ----
+# load estimates and the corresponding functions
 args <- list()
 args$prj.dir <- here::here()
 args$in.dir <- file.path(args$prj.dir, 'data')
 
 source(file.path(args$prj.dir,"R","saving_estimates.R"))
 source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
+source(file.path(args$prj.dir,"R","prevalence_computation_function.R"))
 
-# Sensitivity analysis fertility rates----
 # Load the estimates in the main text
-# w.r.t rep_nb 1
-race.type <- 'national_race_fert_stable_fntwk_mort_'
-do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V10252'), 'initial_result', paste0('1-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
+race.type <- 'national_race_fert_stable_poisson_sampling_rnk_'
+do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V0523'), 'initial_result', paste0('0-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
 
 # Load the estimates in the sensitivity analysis
 race.type <- 'national_race_adj_fert_stable_endyr-3-start-0.5'
-do.fert.alter053 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_fntwk_mort_', 'V1201'), 'initial_result',
-                                                     paste0('1-hist_', race.type, '_summary_all_cg_loss_age.csv'))))
+do.fert.alter053 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_poisson_sampling_rnk_', 'V0523'), 'initial_result',
+                                                     paste0('0-hist_', race.type, '_summary_cg_loss_age.csv'))))
 race.type <- 'national_race_adj_fert_stable_endyr-1-start-0.5'
-do.fert.alter051 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_fntwk_mort_', 'V1201'), 'initial_result',
-                                                     paste0('1-hist_', race.type, '_summary_all_cg_loss_age.csv'))))
+do.fert.alter051 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_poisson_sampling_rnk_', 'V0523'), 'initial_result',
+                                                     paste0('0-hist_', race.type, '_summary_cg_loss_age.csv'))))
 
 race.type <- 'national_race_adj_fert_stable_endyr-3-start-0'
-do.fert.alter03 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_fntwk_mort_', 'V1201'), 'initial_result',
-                                                    paste0('1-hist_', race.type, '_summary_all_cg_loss_age.csv'))))
+do.fert.alter03 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_poisson_sampling_rnk_', 'V0523'), 'initial_result',
+                                                    paste0('0-hist_', race.type, '_summary_cg_loss_age.csv'))))
 
 race.type <- 'national_race_adj_fert_stable_endyr-1-start-0'
-do.fert.alter01 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_fntwk_mort_', 'V1201'), 'initial_result',
-                                                    paste0('1-hist_', race.type, '_summary_all_cg_loss_age.csv'))))
+do.fert.alter01 <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, '_poisson_sampling_rnk_', 'V0523'), 'initial_result',
+                                                    paste0('0-hist_', race.type, '_summary_cg_loss_age.csv'))))
 
 # incidence
 # and identified minor sensitivities to national orphanhood prevalence estimates up to 2006
@@ -169,63 +180,44 @@ saveRDS(tmp3, file.path(args$prj.dir, 'results', 'data_paper', 'sens_analy_adj_f
 
 # prevalence
 # Fig2b
-race_prevl_f2b <- function(do.national.disagg)
+# preprocess for the child survival rate
+
+year_prevl_plot <- function(do.national.disagg, sur.rate)
 {
+  # do.main
   do.age.children.par.grand.all.race <- do.national.disagg[year != 2022]
   do.age.children.par.grand.all.race[, cause.name := gsub('\\\n.*', '', cause.name)]
   do.age.children.par.grand.all.race[, cause.name := gsub('#', '', cause.name)]
 
+  set(do.age.children.par.grand.all.race,NULL,'deaths', NULL)
   do.age.children.par.grand.all.race <- do.age.children.par.grand.all.race[, year := as.integer(year)]
-  dt.cum.all.cause.race <- get_preval_cg_loss_age_children_all_yr(do.age.children.par.grand.all.race, 'all')
+  dt.cum.all.cause.race <- get_preval_all_cg_loss_types_age_children_child_mort_incul_all_yr(sur.rate, do.age.children.par.grand.all.race)
+  dt.cum.all.age <- dt.cum.all.cause.race[year != 2022 & year >= 2000 & race.eth != 'Others', list(value = sum(value, na.rm = T)),
+                                          by = c('state', 'variable', 'year')]
 
-  dt.cum.all.age <- dt.cum.all.cause.race[year != 2022 & year >= 2000]
-
-  # fill the empty records for COVID-19
-  dt.cum.all <- dt.cum.all.age[year == 2021]
-  tmp <- as.data.table(expand.grid(state = unique(dt.cum.all$state),
-                                   year = unique(dt.cum.all$year),
-                                   cause.name = unique(dt.cum.all$cause.name),
-                                   race.eth = unique(dt.cum.all$race.eth),
-                                   child.age.group = unique(dt.cum.all$child.age.group),
-                                   loss.type = unique(dt.cum.all$loss.type),
-                                   variable = unique(dt.cum.all$variable)))
-
-  dt.cum.all.age <- merge(dt.cum.all.age, tmp, by = c('state', 'year', 'cause.name', 'race.eth',
-                                                      'child.age.group', 'loss.type', 'variable'), all = T)
-  dt.cum.all.age[is.na(value), value := 0]
   # sum(dt.cum.all.age$value)
-  unique(dt.cum.all.age$loss.type)
-  unique(dt.cum.all.age$race.eth)
+  unique(dt.cum.all.age$variable)
 
-  dt.cum.all.age <- dt.cum.all.age[loss.type == 'orphans']
-  dt.cum.all.age <- dt.cum.all.age[, list(value = sum(value, na.rm = T)),
-                                   by = c('state', 'year', 'cause.name', 'race.eth', 'loss.type',
-                                          'variable')]
-  # remove the empty unknwon records
-  dt.cum.all.age <- dt.cum.all.age[race.eth != 'Unknown']
-  dt.cum.all.age.pre <- dt.cum.all.age[grepl('Prev', variable) & year >= 2000  & loss.type == 'orphans']
+  dt.cum.all.age.pre <- dt.cum.all.age[ year >= 2000 & variable == 'orphans']
   c.pop <- as.data.table( read.csv(file.path(args$in.dir, 'data', 'pop', paste0('national_race', '_usa_children_population_age.csv'))))
   c.pop <- c.pop[, list(pop = sum(population, na.rm = T)),
                  by = c('state', 'year')]
   dt.cum.all.age.pre.rate <- merge(dt.cum.all.age.pre, c.pop, by = c('state', 'year'), all.x = T)
   dt.cum.all.age.pre.rate[, value := value/pop*1e5]
   dt.cum.all.age.pre.rate[, value := value/10/100]
+  dt.cum.all.age.pre.rate[, race.eth := 'All']
 
   return(dt.cum.all.age.pre.rate)
 }
 
-# Regardless of race.eth
-do.main[, race.eth := 'All']
-do.fert.alter053[, race.eth := 'All']
-do.fert.alter051[, race.eth := 'All']
-do.fert.alter01[, race.eth := 'All']
-do.fert.alter03[, race.eth := 'All']
+sur.rate <- process_child_survival_rate(args$prj.dir)
 
-do.main.tmp <- race_prevl_f2b(do.main)
-do.fert.alter053.tmp <- race_prevl_f2b(do.fert.alter053)
-do.fert.alter051.tmp <- race_prevl_f2b(do.fert.alter051)
-do.fert.alter03.tmp <- race_prevl_f2b(do.fert.alter03)
-do.fert.alter01.tmp <- race_prevl_f2b(do.fert.alter01)
+do.main.tmp <- year_prevl_plot(do.main, sur.rate)
+
+do.fert.alter053.tmp <- year_prevl_plot(do.fert.alter053[, rep.nb := 'x'], sur.rate)
+do.fert.alter051.tmp <- year_prevl_plot(do.fert.alter051[, rep.nb := 'x'], sur.rate)
+do.fert.alter03.tmp <- year_prevl_plot(do.fert.alter03[, rep.nb := 'x'], sur.rate)
+do.fert.alter01.tmp <- year_prevl_plot(do.fert.alter01[, rep.nb := 'x'], sur.rate)
 
 tmp <- rbind(do.main.tmp[, type := 'Central analysis'],
              do.fert.alter051.tmp[, type := sen.name[1]],
@@ -242,7 +234,7 @@ row.title <- paste0("Rate of cumulative burden of\nparental death per 100 childr
 # 240516 regardless of race
 pd <- copy(tmp)
 pd$year <- as.character(pd$year)
-
+pd[,cause.name:= 'All']
 pd <- unique(pd[, list(year, race.eth,  value, variable, cause.name, type)])
 pd[, race.eth := 'All']
 pd <- pd[, list(value = sum(value, na.rm = T)),
@@ -288,9 +280,7 @@ by = c('variable')]
 tmp.stat
 
 tmp2[, race.eth := 'Combined all race & ethnicity groups']
-tmp2
-
-##
+# tmp2
 
 pd[, race.eth := gsub(' or ', '\n', race.eth)]
 tmp <- as.data.table(expand.grid(
@@ -300,23 +290,7 @@ tmp <- as.data.table(expand.grid(
 pd <- merge(tmp, pd, by = c('year', 'race.eth', 'type'), all = T)
 pd[is.na(value), value := 0]
 
-# pd$race.eth <- factor(pd$race.eth,
-#                       levels = c("Hispanic" ,
-#                                  "Non-Hispanic American Indian\nAlaska Native",
-#                                  "Non-Hispanic Asian" ,
-#                                  "Non-Hispanic Black" ,
-#                                  "Non-Hispanic White",
-#                                  "Others"))
-# jco
-# col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "#D3D3D3" , '#4A6990FF')
-# col.race <- c("#DF8F44FF", "#00A1D5FF", "#B24745FF", "#79AF97FF", "grey70" , '#4A6990FF')
-
-# setkey(pd, race.eth)
-# race.cat <- unique(pd$race.eth)
 pd[grepl('Central', type) & year == 2020, race.eth.id := race.eth]
-# pd[year != 2019 &  grepl('Black', race.eth), race.eth.id := '']
-# pd[year != 2016 & race.eth != 'Others' & !(grepl('Black', race.eth)), race.eth.id := '']
-# pd[year != 2021 & race.eth == 'Others', race.eth.id := '']
 
 setkey(pd, race.eth, type)
 pd[is.na(type)]
@@ -325,33 +299,26 @@ lab.x[, year := as.integer(year)]
 lab.x[, if.t := (year/5 == as.integer(year/5))]
 lab.x[, year := as.character(year)]
 lab.x[if.t == F, year := '']
+
+# [EDF 10b] ----
 p2 <- ggplot(pd[race.eth != 'Others'], aes(x = as.character(year), y = value, group = type,
                      col = type, linetype = type, linewidth = type) )+
   geom_line() +
   scale_linetype_manual(values = c(1, 3, 6, 2, 4)) +
-  # scale_linewidth_manual(values = c(6,5, 1, 2, 3, 4, 5)) +
-  # scale_colour_manual(values = col.race, drop = T) +
   scale_linewidth_manual(values = 2*c(.4, 1, .4, .6, .6), drop = T) +
-
-  # scale_linewidth_manual(values = 2*c(.4, .6, 1, 0.6, 0.4), drop = T) +
-  # scale_x_discrete(
-  #   breaks = seq(2000, 2021, 5),
-  #                  labels = lab.x$year) +
   theme_bw() +
-  scale_color_npg() +
-  # scale_y_continuous(limits = c(0, NA),
+  ggsci::scale_color_npg() +
+
+  xlab('') +
+  ylab('Orphanhood prevalence rate per 100 children') +
+  # scale_y_continuous(limits = c(2.3, 3.5),
   #                    labels = scales::comma,
   #                    expand = expansion(mult = c(0, 0.01))) +
   # facet_wrap(.~race.eth, scales = 'free', ncol = 2) +
-  xlab('') +
-  ylab('Orphanhood prevalence rate per 100 children') +
-
   labs(
        linetype = 'Sensitivity analysis on correlations between mortality and fertility rates',
        linewidth = 'Sensitivity analysis on correlations between mortality and fertility rates',
        col = 'Sensitivity analysis on correlations between mortality and fertility rates') +
-  # guides(col = guide_legend(nrow = 2, byrow = T),
-  #   linetype = guide_legend(nrow = 2, byrow = T)) +
   guides(linetype = guide_legend(title.position="top", title.hjust = 0.5, nrow = 2),
          col = guide_legend(title.position="top", title.hjust = 0.5, nrow = 2)) +
   theme(legend.position = "bottom",
@@ -370,21 +337,57 @@ p2 <- ggplot(pd[race.eth != 'Others'], aes(x = as.character(year), y = value, gr
         strip.background = element_blank()
   )
 p2
-p1 <- p1 + theme(legend.position = 'none')
-p1 <- p1 +scale_color_npg()
 
+# Sensitivity analysis on historic fertility rates ----
+source(file.path(args$prj.dir,"R","saving_estimates.R"))
+source(file.path(args$prj.dir,"R","postprocessing_fig.R"))
+source(file.path(args$prj.dir,"R","sensitivity_figures_function.R"))
+source(file.path(args$prj.dir,"R","prevalence_computation_function.R"))
+
+# Load the estimates in the main text
+# w.r.t rep_nb 0
+# cleaned pipeline
+race.type <- 'national_race_fert_stable_poisson_sampling_rnk_'
+do.main <- as.data.table(read.csv(file.path(args$prj.dir, 'results',paste0('CI_', race.type, 'V0523'), 'initial_result', paste0('0-hist_national_race_fert_stable_summary_all_cg_loss_age.csv'))))
+
+# Load the estimates in the sensitivity analysis
+race.type <- 'national_race_poisson_sampling_rnk_'
+do.fert.alter <- as.data.table(read.csv(file.path(args$prj.dir, 'results', paste0('CI_', race.type, 'V0523'), 'initial_result', paste0('0-hist_national_race_summary_cg_loss_age.csv'))))
+
+# deviation orphanhood estimates deviated by up to $\pm XYZ\%$ of the central estimate,
+# and identified minor sensitivities to national orphanhood prevalence estimates up to 2006
+tmp <- merge(do.main[, list(cause.name,state,race.eth,year,child.age,orphans)], do.fert.alter[, list(cause.name,state,race.eth,year,child.age,orphans)],
+             by = c('cause.name','state','race.eth','year','child.age'), all = T)
+tmp <- tmp[, list(main.orphans= sum(orphans.x, na.rm = T),
+                  alter.orphans = sum(orphans.y, na.rm = T)),
+           by = c('state','year')]
+tmp[, dev := abs(alter.orphans - main.orphans)/main.orphans]
+tmpp <- tmp[,max(dev)*100]
+saveRDS(tmpp, file.path(args$prj.dir, 'results', 'data_paper', 'sens_analy_fert_rate_comp.rds'))
+
+# prevalence
+sur.rate <- process_child_survival_rate(args$prj.dir)
+do.main.tmp <- race_prevl_plot(do.main, sur.rate)
+do.fert.alter.tmp <- race_prevl_plot(do.fert.alter[, rep.nb := 'x'], sur.rate)
+
+# combine
+tmp <- rbind(do.main.tmp[, type := 'Main method'], do.fert.alter.tmp[, type := 'Alternative method'])
+tmp[, type := factor(type, levels = c('Main method', 'Alternative method'))]
+setkey(tmp, race.eth, type)
+row.title <- paste0("Rate of cumulative burden of\nparental death per 100 children")
+
+# [EDF 10a] ----
+# whole US.
+# show the total burden for all causes by age of children
+# Combine figure from script misc_sen_analyse_adj_fert_rates_0516.R
+pb <- generate_edf9a(tmp[, cause.name := 'x'])
+
+# Combine three plots ----
 p <- ggpubr::ggarrange(pb, p2, ncol = 2,
                        labels = c('a', 'b'),
                        widths = c(1,1), common.legend = F,
                        align = 'hv'
 
 )
-# p
-# p
 ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert.png')), p, w = 16, h = 12, dpi = 310, limitsize = FALSE)
 ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert.pdf')), p, w = 16, h = 12, dpi = 310, limitsize = FALSE)
-
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert2.png')), p2, w = 8, h = 12, dpi = 310, limitsize = FALSE)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert2.pdf')), p2, w = 8, h = 12, dpi = 310, limitsize = FALSE)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert1.png')), p1, w = 4, h = 5, dpi = 310, limitsize = FALSE)
-ggsave(file.path(args$prj.dir, 'results', 'figs', paste0('edf8_sens_to_national_adj_fert1.pdf')), p1, w = 4, h = 5, dpi = 310, limitsize = FALSE)

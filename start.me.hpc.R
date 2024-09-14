@@ -43,7 +43,6 @@ if (1)
 
     rank_nchs_birth_data = 0,
     rank_cdc_birth_data = 0,
-
     rank_nchs_cdc_birth_state_race_data = 0,
 
     save_raw_data = 0,
@@ -53,15 +52,26 @@ if (1)
     uncertainty_state_level_rep_resample_poisson_rnk = 0,
     uncertainty_state_race_level_rep_resample_poisson_rnk = 0,
     #
+
+    # extra pipeline to resample the subcategory of the grandparent data
+    # national 0730
+    uncertainty_grandp_adj_race_eth_level_rep_resample_poisson_rnk_final = 0,
+    # state 0731
+    uncertainty_state_level_rep_resample_poisson_rnk_grandp_diagg = 0,
+
+
     # postprocessing script for figures and tables
-    postprocessing_estimates_paper_plot_national_race_poisson_rnk = 0,
-    postprocessing_estimates_paper_plot_state_poisson_rnk = 0,
+    # 0730 new
+    postprocessing_estimates_paper_plot_national_race_poisson_rnk_tab_fig = 0,
+    # new 0731
+    postprocessing_estimates_paper_plot_state_grandp_sept_poisson_rnk = 0,
     postprocessing_estimates_paper_plot_state_race_poisson_rnk = 0,
 
+    #
     # sensitivity analysis
     # baseline to compare (central analysis)
     single_national_baseline = 0,
-    race_fertility_alter_up = 0,
+    race_fertility_alter_up = 1,
 
     race_eth_adj_fert_0_3 = 0,
     race_eth_adj_fert_0_1 = 0,
@@ -75,11 +85,12 @@ if (1)
   args$pkg_dir <- "/rds/general/user/yc2819/home/github/US_all_causes_deaths"
   args$out_dir <- "/rds/general/user/yc2819/home/github/US_all_causes_deaths/results"
 
+  args$start.nb <- 1
   # total nb of sampled datasets and estimates to get the uncertainty
-  args$sample.nb <- 1e4
+
+  args$sample.nb <- 1e3
   # which file to use
-  # 1e4 version
-  args$sample.type <- 'poisson_sampling_rnk_1e4'
+  args$sample.type <- 'poisson_sampling_rnk'
   args$sel_leading_nb <- 'all'
 }
 
@@ -183,7 +194,6 @@ if (args$run_analysis$resample_mort_data_poisson_with_comp_ratio)
 if (args$run_analysis$rank_nchs_mort_national_data)
 {
   data.dir <- file.path(args$pkg_dir, 'data', 'NCHS', 'rep_mortality_poisson')
-
   out.dir <- file.path(args$pkg_dir, 'data', args$sample.type)
 
   cmds <- vector("list", 1)
@@ -344,6 +354,7 @@ if (args$run_analysis$rank_nchs_mort_state_data)
   }
 }
 
+# separate:
 if (args$run_analysis$rank_cdc_mort_data)
 {
   data.dir <- file.path(args$pkg_dir, 'data')
@@ -1031,6 +1042,82 @@ if (args$run_analysis$save_raw_data)
   }
 }
 
+# resample the grandp data ----
+if (args$run_analysis$resampled_grandp_data)
+{
+  cmds <- vector("list", 1)
+  for (rep.id in 1)
+  {
+    i <- 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
+    cmd <- paste0(cmd,"nb_rep=",args$sample.nb,"\n")
+
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'ACS_grandp_data_ci_save.R'),
+                  ' --pkg_dir $pkg_dir',
+                  ' --nb_rep $nb_rep'
+
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 07,
+                                hpc.select = 1,
+                                hpc.nproc = 10,
+                                hpc.mem = "500gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$out_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
 # uncertainty based on Poisson noise by ranking ----
 # run the national level results
 if (args$run_analysis$uncertainty_race_eth_level_rep_resample_poisson_rnk)
@@ -1139,11 +1226,12 @@ if (args$run_analysis$uncertainty_race_eth_level_rep_resample_poisson_rnk)
   }
 }
 
-# run the state level results ----
+# run the state level results
 if (args$run_analysis$uncertainty_state_level_rep_resample_poisson_rnk)
 {
   cmds <- vector("list", args$sample.nb)
   i <- 0
+  # args$sample.type <- 'poisson_sampling_rnk'
   for (rep.id in 1:args$sample.nb)
   {
     i <- i + 1
@@ -1243,11 +1331,12 @@ if (args$run_analysis$uncertainty_state_level_rep_resample_poisson_rnk)
   }
 }
 
-# run the state by race/eth level results ----
+# run the state by race/eth level results
 if (args$run_analysis$uncertainty_state_race_level_rep_resample_poisson_rnk)
 {
   cmds <- vector("list", args$sample.nb)
   i <- 0
+  # args$sample.type <- 'poisson_sampling_rnk'
   for (rep.id in 1:args$sample.nb)
   {
     i <- i + 1
@@ -1348,257 +1437,13 @@ if (args$run_analysis$uncertainty_state_race_level_rep_resample_poisson_rnk)
   }
 }
 
-# postprocessing poission ranked noise ----
-if (args$run_analysis$postprocessing_estimates_paper_plot_national_race_poisson_rnk)
+# sep the grandparents loss
+if (args$run_analysis$uncertainty_grandp_adj_race_eth_level_rep_resample_poisson_rnk_final)
 {
-  cmds <- vector("list", 1)
+  cmds <- vector("list", args$sample.nb)
   i <- 0
-  for (rep.id in seq_len(1))
+  for (rep.id in 1:args$sample.nb)
   {
-    i <- i + 1
-    cmd <- ''
-    cmd <- paste0(cmd,"CWD=$(pwd)\n")
-    cmd <- paste0(cmd,"echo $CWD\n")
-    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
-    tmpdir <- paste0("$CWD/",tmpdir.prefix)
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
-    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
-    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
-    cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_',"\n")
-    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_national_race_paper_0523.R'),
-                  ' --pkg_dir $pkg_dir',
-                  ' --v_name $v_name',
-                  ' --race_type $race_type'
-    )
-    cmd <- paste0(cmd, tmp, '\n')
-    # tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'Paper_outputs_NCHS_historical_analysis_national_race_0510.R'),
-    #               ' --pkg_dir $pkg_dir',
-    #               ' --v_name $v_name',
-    #               ' --race_type $race_type'
-    # )
-    # cmd <- paste0(cmd, tmp, '\n')
-    if (!args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
-    }
-    if (args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
-    }
-    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
-    cmd <- paste0(cmd,"cd $CWD\n")
-    cmds[[i]] <- cmd
-  }
-
-  if (!args$on_hpc)
-  {
-    cmd <- paste( cmds, collapse = '\n\n')
-  }
-  if (args$on_hpc)
-  {
-    pbshead <- make.PBS.header(	hpc.walltime = 07,
-                                hpc.select = 1,
-                                hpc.nproc = 10,
-                                hpc.mem = "526gb",
-                                hpc.q = NaN,
-                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
-                                hpc.array = length(cmds)
-    )
-    if (length(cmds) == 1)
-    {
-      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
-    }
-    if (length(cmds) > 1)
-    {
-      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
-      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
-      cmd <- paste(pbshead,cmd ,sep = '\n')
-    }
-  }
-
-  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
-  jobfile <- file.path(args$pkg_dir, jobfile)
-  cat("\nWrite job script to file ", jobfile)
-  cat(cmd, file = jobfile)
-
-  if (args$on_hpc)
-  {
-    cmd <- paste("qsub", jobfile)
-    cat(cmd)
-    cat(system(cmd, intern = TRUE))
-  }
-}
-
-if (args$run_analysis$postprocessing_estimates_paper_plot_state_poisson_rnk)
-{
-  cmds <- vector("list", 1)
-  i <- 0
-  for (rep.id in seq_len(1))
-  {
-    i <- i + 1
-    cmd <- ''
-    cmd <- paste0(cmd,"CWD=$(pwd)\n")
-    cmd <- paste0(cmd,"echo $CWD\n")
-    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
-    tmpdir <- paste0("$CWD/",tmpdir.prefix)
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
-    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
-    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
-    cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_',"\n")
-    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_state_paper_0523.R'),
-                  ' --pkg_dir $pkg_dir',
-                  ' --race_type $race_type',
-                  ' --v_name $v_name'
-    )
-    cmd <- paste0(cmd, tmp, '\n')
-    # tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'Paper_outputs_NCHS_historical_analysis_state_0510.R'),
-    #               ' --pkg_dir $pkg_dir',
-    #               ' --v_name $v_name',
-    #               ' --race_type $race_type'
-    # )
-    # cmd <- paste0(cmd, tmp, '\n')
-    if (!args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
-    }
-    if (args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
-    }
-    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
-    cmd <- paste0(cmd,"cd $CWD\n")
-    cmds[[i]] <- cmd
-  }
-
-  if (!args$on_hpc)
-  {
-    cmd <- paste( cmds, collapse = '\n\n')
-  }
-  if (args$on_hpc)
-  {
-    pbshead <- make.PBS.header(	hpc.walltime = 07,
-                                hpc.select = 1,
-                                hpc.nproc = 10,
-                                hpc.mem = "526gb",
-                                hpc.q = NaN,
-                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
-                                hpc.array = length(cmds)
-    )
-    if (length(cmds) == 1)
-    {
-      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
-    }
-    if (length(cmds) > 1)
-    {
-      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
-      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
-      cmd <- paste(pbshead,cmd ,sep = '\n')
-    }
-  }
-
-  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
-  jobfile <- file.path(args$pkg_dir, jobfile)
-  cat("\nWrite job script to file ", jobfile)
-  cat(cmd, file = jobfile)
-
-  if (args$on_hpc)
-  {
-    cmd <- paste("qsub", jobfile)
-    cat(cmd)
-    cat(system(cmd, intern = TRUE))
-  }
-}
-
-if (args$run_analysis$postprocessing_estimates_paper_plot_state_race_poisson)
-{
-  cmds <- vector("list", 1)
-  i <- 0
-  for (rep.id in seq_len(1))
-  {
-    i <- i + 1
-    cmd <- ''
-    cmd <- paste0(cmd,"CWD=$(pwd)\n")
-    cmd <- paste0(cmd,"echo $CWD\n")
-    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
-    tmpdir <- paste0("$CWD/",tmpdir.prefix)
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
-    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
-    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
-    cmd <- paste0(cmd,"race_type=",'state_race_poisson_',"\n")
-    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_state_race_paper.R'),
-                  ' --pkg_dir $pkg_dir',
-                  ' --race_type $race_type',
-                  ' --v_name $v_name'
-    )
-    cmd <- paste0(cmd, tmp, '\n')
-    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'Paper_outputs_NCHS_historical_analysis_state_race.R'),
-                  ' --pkg_dir $pkg_dir',
-                  ' --v_name $v_name',
-                  ' --race_type $race_type'
-    )
-    cmd <- paste0(cmd, tmp, '\n')
-    if (!args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
-    }
-    if (args$on_hpc)
-    {
-      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
-    }
-    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
-    cmd <- paste0(cmd,"cd $CWD\n")
-    cmds[[i]] <- cmd
-  }
-
-  if (!args$on_hpc)
-  {
-    cmd <- paste( cmds, collapse = '\n\n')
-  }
-  if (args$on_hpc)
-  {
-    pbshead <- make.PBS.header(	hpc.walltime = 07,
-                                hpc.select = 1,
-                                hpc.nproc = 10,
-                                hpc.mem = "526gb",
-                                hpc.q = NaN,
-                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
-                                hpc.array = length(cmds)
-    )
-    if (length(cmds) == 1)
-    {
-      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
-    }
-    if (length(cmds) > 1)
-    {
-      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
-      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
-      cmd <- paste(pbshead,cmd ,sep = '\n')
-    }
-  }
-
-  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
-  jobfile <- file.path(args$pkg_dir, jobfile)
-  cat("\nWrite job script to file ", jobfile)
-  cat(cmd, file = jobfile)
-
-  if (args$on_hpc)
-  {
-    cmd <- paste("qsub", jobfile)
-    cat(cmd)
-    cat(system(cmd, intern = TRUE))
-  }
-}
-
-# national race & ethnicity single run ----
-# use the data without poisson noise, i.e. rep.id = 0 in the ranking folder
-# grnadp use the rep.id = 1 as the data reported online
-if (args$run_analysis$single_national_baseline)
-{
-  cmds <- vector("list", 1)
-  i <- 0
-  if (1)
-  {
-    rep.id <- 0
     i <- i + 1
     cmd <- ''
     cmd <- paste0(cmd,"CWD=$(pwd)\n")
@@ -1611,9 +1456,9 @@ if (args$run_analysis$single_national_baseline)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
     # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
+    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
     # move raw data and function scripts to tmpdir folder
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
@@ -1626,7 +1471,13 @@ if (args$run_analysis$single_national_baseline)
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'fertility', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'R', '*') , ' ', file.path(tmpdir, 'R'),'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'Sens_comp_CI_NCHS_US_all_causes_orphanhood_national_race_level_fert_stable_assump_all_year.R') , ' ', file.path(tmpdir),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'Poisson_rnk_CI_NCHS_US_all_causes_grandparents_disagg_national_race_level_fert_stable_assump_all_year_final.R') , ' ', file.path(tmpdir),'\n')
+
+    # copy the previous results
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'results', 'CI_national_race_fert_stable_poisson_sampling_rnk_V0523', 'initial_result'),'\n')
+
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'results', 'CI_national_race_fert_stable_poisson_sampling_rnk_V0523', 'initial_result', paste0(rep.id, '-hist_national_race_fert_stable_summary_all_cg_loss_age.csv')) , ' ',
+                  file.path(tmpdir, 'results', 'CI_national_race_fert_stable_poisson_sampling_rnk_V0523', 'initial_result'),'\n')
 
     cmd <- paste0(cmd,"pkg_dir=",tmpdir,"\n")
     # cmd <- paste0(cmd,"out_dir_base=",out.dir,"\n")
@@ -1634,7 +1485,454 @@ if (args$run_analysis$single_national_baseline)
     cmd <- paste0(cmd,"rep_nb=",rep.id,"\n")
     cmd <- paste0(cmd,"sel_leading_nb=",args$sel_leading_nb,"\n")
     cmd <- paste0(cmd,"sample_type=",args$sample.type,"\n")
-    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'Sens_comp_CI_NCHS_US_all_causes_orphanhood_national_race_level_fert_stable_assump_all_year.R'),
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'Poisson_rnk_CI_NCHS_US_all_causes_grandparents_disagg_national_race_level_fert_stable_assump_all_year_final.R'),
+                  ' --pkg_dir $pkg_dir',
+                  # ' --out_dir_base $out_dir_base',
+                  ' --v_name $v_name',
+                  ' --sel_leading_nb $sel_leading_nb',
+                  ' --sample_type $sample_type',
+                  ' --rep_nb $rep_nb'
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd,"mkdir -p ",file.path(args$pkg_dir, 'results'),'\n')
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/results/* ', file.path(args$pkg_dir, 'results'),'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd,"mkdir -p ",file.path(args$pkg_dir, 'results'),'\n')
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/results/* ', file.path(args$pkg_dir, 'results'),'\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$pkg_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 05,
+                                hpc.select = 1,
+                                hpc.nproc = 5,
+                                hpc.mem = "50gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$pkg_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
+if (args$run_analysis$uncertainty_state_level_rep_resample_poisson_rnk_grandp_diagg)
+{
+  cmds <- vector("list", args$sample.nb)
+  i <- 0
+  # args$sample.type <- 'poisson_sampling_rnk'
+  for (rep.id in 1:args$sample.nb)
+  {
+    i <- i + 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
+    # create input grandparent data path
+    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', rep.id))
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'birth'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'birth', '*') , ' ', file.path(tmpdir, 'data', 'birth'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'fertility', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'color_setting.RDS') , ' ', file.path(tmpdir, 'data', 'color_setting.RDS'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'R', '*') , ' ', file.path(tmpdir, 'R'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'Poisson_rnk_CI_NCHS_CDC_US_all_causes_orphanhood_grandp_disagg_state_level_all_year.R') , ' ', file.path(tmpdir),'\n')
+
+    # copy the previous results
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'results', 'CI_state_poisson_sampling_rnk_V0523', 'adj_results'),'\n')
+
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'results', 'CI_state_poisson_sampling_rnk_V0523', 'adj_results', paste0(rep.id, '-hist_state_summary_all_cg_loss_age.csv')) , ' ',
+                  file.path(tmpdir, 'results', 'CI_state_poisson_sampling_rnk_V0523', 'adj_results'),'\n')
+
+
+    cmd <- paste0(cmd,"pkg_dir=",tmpdir,"\n")
+    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
+    cmd <- paste0(cmd,"rep_nb=",rep.id,"\n")
+    cmd <- paste0(cmd,"sel_leading_nb=",args$sel_leading_nb,"\n")
+    cmd <- paste0(cmd,"sample_type=",args$sample.type,"\n")
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'Poisson_rnk_CI_NCHS_CDC_US_all_causes_orphanhood_grandp_disagg_state_level_all_year.R'),
+                  ' --pkg_dir $pkg_dir',
+                  ' --v_name $v_name',
+                  ' --sel_leading_nb $sel_leading_nb',
+                  ' --sample_type $sample_type',
+                  ' --rep_nb $rep_nb'
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd,"mkdir -p ",file.path(args$pkg_dir, 'results'),'\n')
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/results/* ', file.path(args$pkg_dir, 'results'),'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd,"mkdir -p ",file.path(args$pkg_dir, 'results'),'\n')
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/results/* ', file.path(args$pkg_dir, 'results'),'\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 03,
+                                hpc.select = 1,
+                                hpc.nproc = 3,
+                                hpc.mem = "50gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$pkg_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
+# postprocessing poisson ranked noise
+if (args$run_analysis$postprocessing_estimates_paper_plot_national_race_poisson_rnk_tab_fig)
+{
+  cmds <- vector("list", 1)
+  i <- 0
+  for (rep.id in seq_len(1))
+  {
+    i <- i + 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
+    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
+    cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_',"\n")
+
+    # cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_1e4_',"\n")
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_national_race_paper_orphan_grandp_fig_tab.R'),
+                  ' --pkg_dir $pkg_dir',
+                  ' --v_name $v_name',
+                  ' --race_type $race_type'
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 70,
+                                hpc.select = 1,
+                                hpc.nproc = 10,
+                                hpc.mem = "926gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$pkg_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
+if (args$run_analysis$postprocessing_estimates_paper_plot_state_grandp_sept_poisson_rnk)
+{
+  cmds <- vector("list", 1)
+  i <- 0
+  for (rep.id in seq_len(1))
+  {
+    i <- i + 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
+    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
+    cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_',"\n")
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_state_paper_orphan_grandp_fig_tab.R'),
+                  ' --pkg_dir $pkg_dir',
+                  ' --race_type $race_type',
+                  ' --v_name $v_name'
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 07,
+                                hpc.select = 1,
+                                hpc.nproc = 10,
+                                hpc.mem = "526gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$pkg_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
+if (args$run_analysis$postprocessing_estimates_paper_plot_state_race_poisson_rnk)
+{
+  cmds <- vector("list", 1)
+  i <- 0
+  for (rep.id in seq_len(1))
+  {
+    i <- i + 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    cmd <- paste0(cmd,"pkg_dir=",args$pkg_dir,"\n")
+    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
+    cmd <- paste0(cmd,"race_type=",'national_race_fert_stable_poisson_sampling_rnk_',"\n")
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'R', 'CI_NCHS_historical_postprocessing_state_race_orphan_fig_tab.R'),
+                  ' --pkg_dir $pkg_dir',
+                  ' --race_type $race_type',
+                  ' --v_name $v_name'
+    )
+    cmd <- paste0(cmd, tmp, '\n')
+    if (!args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R "', tmpdir,'"/* ', args$out_dir,'\n')
+    }
+    if (args$on_hpc)
+    {
+      cmd <- paste0(cmd, 'cp -R --no-preserve=mode,ownership "', tmpdir,'"/* ', args$out_dir, '\n')
+    }
+    cmd <- paste0(cmd, 'chmod -R g+rw ', args$out_dir,'\n')
+    cmd <- paste0(cmd,"cd $CWD\n")
+    cmds[[i]] <- cmd
+  }
+
+  if (!args$on_hpc)
+  {
+    cmd <- paste( cmds, collapse = '\n\n')
+  }
+  if (args$on_hpc)
+  {
+    pbshead <- make.PBS.header(	hpc.walltime = 07,
+                                hpc.select = 1,
+                                hpc.nproc = 10,
+                                hpc.mem = "526gb",
+                                hpc.q = NaN,
+                                hpc.load = "module load anaconda3/personal\nsource activate all_causes_deaths\nexport TBB_CXX_TYPE=gcc\nexport CXXFLAGS+=-fPIE",
+                                hpc.array = length(cmds)
+    )
+    if (length(cmds) == 1)
+    {
+      cmd <- paste(pbshead, cmds[[1]] ,sep = '\n')
+    }
+    if (length(cmds) > 1)
+    {
+      cmds <- lapply(seq_along(cmds), function(i){ paste0(i,')\n',cmds[[i]],';;\n') })
+      cmd <- paste0('case $PBS_ARRAY_INDEX in\n',paste0(cmds, collapse = ''),'esac')
+      cmd <- paste(pbshead,cmd ,sep = '\n')
+    }
+  }
+
+  jobfile <- gsub(':','',paste("csim",paste(strsplit(date(),split = ' ')[[1]],collapse = '_',sep = ''),'sh', sep = '.'))
+  jobfile <- file.path(args$pkg_dir, jobfile)
+  cat("\nWrite job script to file ", jobfile)
+  cat(cmd, file = jobfile)
+
+  if (args$on_hpc)
+  {
+    cmd <- paste("qsub", jobfile)
+    cat(cmd)
+    cat(system(cmd, intern = TRUE))
+  }
+}
+
+# Sensitivity analysis supporting runs ----
+# national race & ethnicity single run
+# use the data without poisson noise, i.e. rep.id = 0 in the ranking folder
+
+if (args$run_analysis$single_national_baseline)
+{
+  cmds <- vector("list", 1)
+  i <- 0
+  rep.id <- 0
+  {
+    i <- i + 1
+    cmd <- ''
+    cmd <- paste0(cmd,"CWD=$(pwd)\n")
+    cmd <- paste0(cmd,"echo $CWD\n")
+    tmpdir.prefix <- paste0('csim_', i, '_',format(Sys.time(),"%y-%m-%d"))
+    tmpdir <- paste0("$CWD/",tmpdir.prefix)
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
+    # create input mortality, natality and pop data path
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
+    # create input grandparent data path
+    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-1'))
+    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-1'), '*'), ' ', file.path(tmpdir.data),'\n')
+    # move raw data and function scripts to tmpdir folder
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
+    cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'fertility', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'R', '*') , ' ', file.path(tmpdir, 'R'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'Poisson_rnk_CI_NCHS_US_all_causes_orphanhood_national_race_level_fert_stable_assump_all_year.R') , ' ', file.path(tmpdir),'\n')
+
+    cmd <- paste0(cmd,"pkg_dir=",tmpdir,"\n")
+    # cmd <- paste0(cmd,"out_dir_base=",out.dir,"\n")
+    cmd <- paste0(cmd,"v_name=",paste0('V', format(Sys.time(),"%m%d")),"\n")
+    cmd <- paste0(cmd,"rep_nb=",rep.id,"\n")
+    cmd <- paste0(cmd,"sel_leading_nb=",args$sel_leading_nb,"\n")
+    cmd <- paste0(cmd,"sample_type=",args$sample.type,"\n")
+    tmp <- paste0('Rscript ', file.path('$pkg_dir', 'Poisson_rnk_CI_NCHS_US_all_causes_orphanhood_national_race_level_fert_stable_assump_all_year.R'),
                   ' --pkg_dir $pkg_dir',
                   # ' --out_dir_base $out_dir_base',
                   ' --v_name $v_name',
@@ -1699,7 +1997,7 @@ if (args$run_analysis$single_national_baseline)
   }
 }
 
-# national race & ethnicity altern ----
+# national race & ethnicity altern
 if (args$run_analysis$race_fertility_alter_up)
 {
   cmds <- vector("list", 1)
@@ -1716,21 +2014,14 @@ if (args$run_analysis$race_fertility_alter_up)
     tmpdir <- paste0("$CWD/",tmpdir.prefix)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
     # create input mortality data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id))
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
-    # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
-    # move raw data and function scripts to tmpdir folder
-    # cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
-    # cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', 'raw_ci', '*') , ' ', file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
@@ -1811,7 +2102,7 @@ if (args$run_analysis$race_fertility_alter_up)
   }
 }
 
-# run the national level results ----
+# fert rates assumptions
 if (args$run_analysis$race_eth_adj_fert_0_3)
 {
   cmds <- vector("list", 1)
@@ -1828,21 +2119,15 @@ if (args$run_analysis$race_eth_adj_fert_0_3)
     tmpdir <- paste0("$CWD/",tmpdir.prefix)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
     # create input mortality data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id))
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
-    # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
-    # move raw data and function scripts to tmpdir folder
-    # cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
+
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
-    # cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', 'raw_ci', '*') , ' ', file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
@@ -1941,21 +2226,15 @@ if (args$run_analysis$race_eth_adj_fert_0_1)
     tmpdir <- paste0("$CWD/",tmpdir.prefix)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
     # create input mortality data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id))
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
-    # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
-    # move raw data and function scripts to tmpdir folder
-    # cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
+
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
-    # cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', 'raw_ci', '*') , ' ', file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
@@ -2042,6 +2321,7 @@ if (args$run_analysis$race_eth_adj_fert_05_3)
 {
   cmds <- vector("list", 1)
   i <- 0
+  # args$sample.type <- 'rep_mortality_poisson'
   if (1)
   {
     rep.id <- 0
@@ -2053,21 +2333,14 @@ if (args$run_analysis$race_eth_adj_fert_05_3)
     tmpdir <- paste0("$CWD/",tmpdir.prefix)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
     # create input mortality data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id))
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
-    # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
-    # move raw data and function scripts to tmpdir folder
-    # cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
-    # cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', 'raw_ci', '*') , ' ', file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
@@ -2154,6 +2427,7 @@ if (args$run_analysis$race_eth_adj_fert_05_1)
 {
   cmds <- vector("list", 1)
   i <- 0
+  # args$sample.type <- 'rep_mortality_poisson'
   if (1)
   {
     rep.id <- 0
@@ -2165,21 +2439,14 @@ if (args$run_analysis$race_eth_adj_fert_05_1)
     tmpdir <- paste0("$CWD/",tmpdir.prefix)
     cmd <- paste0(cmd,"mkdir -p ",tmpdir,'\n')
     # create input mortality data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id))
+    tmpdir.data <- file.path(tmpdir, 'data', args$sample.type, paste0('rep_id-', rep.id))
     cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
-    # create input grandparent data path
-    tmpdir.data <- file.path(tmpdir, 'data', 'grandparents', paste0('rep_grandp-', '1'))
-    cmd <- paste0(cmd,"mkdir -p ",tmpdir.data,'\n')
-    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', paste0('rep_grandp-', '1'), '*'), ' ', file.path(tmpdir.data),'\n')
-    # move raw data and function scripts to tmpdir folder
-    # cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
+    cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', args$sample.type, paste0('rep_id-', rep.id), '*'), ' ', file.path(tmpdir.data),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'data', 'NCHS', 'fertility'),'\n')
     cmd <- paste0(cmd,"mkdir -p ", file.path(tmpdir, 'R'),'\n')
-    # cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'grandparents', 'raw_ci', '*') , ' ', file.path(tmpdir, 'data', 'grandparents', 'raw_ci'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'CDC', '*') , ' ', file.path(tmpdir, 'data', 'CDC'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'data', '*') , ' ', file.path(tmpdir, 'data', 'data'),'\n')
     cmd <- paste0(cmd,"cp -R ",  file.path(args$pkg_dir, 'data', 'NCHS', 'births', '*') , ' ', file.path(tmpdir, 'data', 'NCHS', 'births'),'\n')
