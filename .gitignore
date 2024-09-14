@@ -1,8 +1,11 @@
 results/*
-data/*
 scripts_death/deprecated/*
 scripts_births/deprecated/*
-
+del/*
+figures/*
+rev/*
+deprecated/*
+data/*
 R/deprecated/*
 
 

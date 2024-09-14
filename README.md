@@ -34,12 +34,12 @@ Please cite this work as
 Villaveces, A., Chen, Y. ... & Ratmann, O. (2024). Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study. medRxiv, 2024-03.
 
 ## Acknowledgements
-We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS especially Dr. Robert Anderson for his helpful suggestions on interpreting and classifying disease groups and race groups using existing NCHS data. We also thank Prof. Chris Desmond for his comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the Moderna Charitable Foundation (to OR); the World Health Organisation (to SF); the Engineering and Physical Sciences Research Council (EPSRC) through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy); the Imperial College London President’s PhD Scholarship fund to YC; Imperial College London Undergraduate Research Bursaries to LG and VKM; and London Mathematical Society Undergraduate Research Bursary to DW (URB-2023-86). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript. The findings and conclusions in this report are those of the author(s) and do not necessarily represent the official position of the Centers for Disease Control and Prevention. 
+We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS especially Dr. Robert Anderson for his helpful suggestions on interpreting and classifying disease groups and race groups using existing NCHS data. We also thank Prof. Chris Desmond for his comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the UKRI Global Challenges Research Fund (to LC); the Moderna Charitable Foundation (to HJTU, OR); the World Health Organization (to SF); the Engineering and Physical Sciences Research Council (EPSRC) (EP/V002910/2 to SF); the Engineering and Physical Sciences Research Council (EPSRC) through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy) and the Imperial College London President’s PhD Scholarship fund (to YC); Imperial College London Undergraduate Research Bursaries (to LG, VKM); and London Mathematical Society Undergraduate Research Bursary (URB-2023-86 to DW). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript.
 
 ## Quick Start
 
 ### System Requirements
-- [R](https://www.r-project.org/) version >= 3.5.1
+- [R](https://www.r-project.org/) version >= 4.2.3
 
 ### Installation 
 Please use the following ```bash``` script to build a conda virtual environment and install all R dependencies:
@@ -47,15 +47,16 @@ Please use the following ```bash``` script to build a conda virtual environment 
 ```shell
 git clone https://github.com/MLGlobalHealth/orphanhood-caregiver-death-in-US-from-all-causes-of-mortality.git
 cd orphanhood-caregiver-death-in-US-from-all-causes-of-mortality
+conda env create -f all_causes_deaths.yml
 ```
 
 If not activated, activate the environment for use:
-```shell[README.md](README.md)
+```shell
 source activate all_causes_deaths
 ```
 
 ## Reproducing our Analyses
-All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All raw data for this paper were stored in [Zenodo](https://zenodo.org/records/11423744).
+All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All publicly available data for this paper were stored in [Zenodo](https://zenodo.org/records/11423744).
 
 ### Preprocessing steps
 #### Mortality data
@@ -144,7 +145,7 @@ To process the analysis, set `uncertainty_race_eth_level_rep_resample_poisson_rn
 
 3. Orphanhood and all caregiver loss estimation at the state level
 
-To process the analysis, set `uncertainty_state_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. The corresponding postprocessing script is `R/CI_NCHS_historical_postprocessing_state_paper_0523.R`. To separate the grandparent caregiver loss into primary and secondary caregiver loss and adjust the grandparent caregiver loss removing the double-counting, please set `uncertainty_state_level_rep_resample_poisson_rnk_grandp_diagg = 1`. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_grandp_sept_poisson_rnk = 1`, which will automatically run script `/R/CI_NCHS_historical_postprocessing_state_paper_orphan_grandp_fig_tab.R`.
+To process the analysis, set `uncertainty_state_level_rep_resample_poisson_rnk = 1` in the input arguments block. Set argument `args$sample.nb`, the number of sampled datasets you want to use for the uncertainty computation, a suitable number for analyses. The corresponding postprocessing script is `R/CI_NCHS_historical_postprocessing_state_paper_0523.R`. To separate the grandparent caregiver loss into primary and secondary caregiver loss and adjust the grandparent caregiver loss removing the double-counting, please set `uncertainty_state_level_rep_resample_poisson_rnk_grandp_diagg = 1`. For the paper figures and tables, set `postprocessing_estimates_paper_plot_state_grandp_sept_poisson_rnk = 1`, which will automatically run script `/R/CI_NCHS_historical_postprocessing_state_paper_orphan_grandp_fig_tab.R`. For map generation, please run script `R/Fig4_maps_svg.Rmd` and obtain a HTML with two interactive maps.
 
 4. Orphanhood and all caregiver loss estimation at the state level by race and ethnicity
 
@@ -159,15 +160,12 @@ To process the analyses, please run script `/R/misc_nchs_cdc_mort_comp_0520.R`.
 
 2. Sensitivity in national-level orphanhood estimates to assumption on historic national-level fertility rates
 
-To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516_clean.R`.
+To process the analysis, set `race_fertility_alter = 1`. For the figures in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_clean.R`.
 
 3. Sensitivity in national-level orphanhood estimates to potentially correlated fertility rates
 
-To process the analysis, set `race_eth_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_0516_clean.R`.
+To process the analysis, set `race_eth_adj_fert_{starting.rate}_{year.length} = 1`, where the starting.rate can be chosen as 05 or 0, representing 0.5 or 0 probability of giving births on the year to death; year.length can be chosen as 1 or 3, representing minimal 1 year or 3 years to live with 1 probability of giving births. For the figure in the paper, please run script `/R/misc_sen_analyse_adj_fert_rates_clean.R`.
 
 4. Sensitivity in national-level grandparent caregiver loss estimates to assumption on the age of children experiencing loss of a grandparent caregiver
 
-To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis_0527_clean.R`.
-
-Others:
-Data used in the legend: `/R/misc_legend_data_paper.R`
+To process the analysis and get the figure in the paper, please run script `/R/misc_sensitivity_analysis_clean.R`.
