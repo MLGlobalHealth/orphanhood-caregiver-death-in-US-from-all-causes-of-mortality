@@ -1,8 +1,7 @@
 # US orphanhood estimations and all caregiver loss by all causes deaths
 [![License: CC BY 4.0](https://img.shields.io/badge/License-CC_BY_4.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
-[![medRxiv link](https://img.shields.io/badge/medRxiv-link%20to%20paper-blue)](https://doi.org/10.1101/2024.03.25.24304835)
 
-**Welcome!** This repository contains the code and data for the analyses presented in the paper *Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study* by Andrés Villaveces, Yu Chen et al.
+**Welcome!** This repository contains the code and data for the analyses presented in the paper *Orphanhood and caregiver death among children in the United States by all-cause mortality, 2000–2021* by Andrés Villaveces, Yu Chen et al. **Nat Med** 31, 672–683 (2025). <https://doi.org/10.1038/s41591-024-03343-6>
 
 ## Table of Contentes
 - [License](#license)
@@ -31,7 +30,7 @@ Imperial makes no representation or warranty about the accuracy or completeness 
 ## Citation
 Please cite this work as 
 
-Villaveces, A., Chen, Y. ... & Ratmann, O. (2024). Orphanhood and caregiver death among children in the United States due to all-cause mortality 2000-2021: A Modeling Study. medRxiv, 2024-03.
+Villaveces, A., Chen, Y. et al. Orphanhood and caregiver death among children in the United States by all-cause mortality, 2000–2021. Nat Med 31, 672–683 (2025). <https://doi.org/10.1038/s41591-024-03343-6>
 
 ## Acknowledgements
 We thank the Global Reference Group for Children In Crisis, reviewers at the CDC and NCHS especially Dr. Robert Anderson for his helpful suggestions on interpreting and classifying disease groups and race groups using existing NCHS data. We also thank Prof. Chris Desmond for his comments on early versions of this work. We thank the Imperial College Research Computing Service (https://doi.org/10.14469/hpc/2232) for providing the computational resources to perform this study; and Zulip for sponsoring team communications through the Zulip Cloud Standard chat app. This study was supported by the Oak Foundation (to LC, LS); the UKRI Global Challenges Research Fund (to LC); the Moderna Charitable Foundation (to HJTU, OR); the World Health Organization (to SF); the Engineering and Physical Sciences Research Council (EPSRC) (EP/V002910/2 to SF); the Engineering and Physical Sciences Research Council (EPSRC) through the EPSRC Centre for Doctoral Training in Modern Statistics and Statistical Machine Learning at Imperial College London and Oxford University (EP/S023151/1 to A. Gandy) and the Imperial College London President’s PhD Scholarship fund (to YC); Imperial College London Undergraduate Research Bursaries (to LG, VKM); and London Mathematical Society Undergraduate Research Bursary (URB-2023-86 to DW). The funders had no role in study design, data collection and analysis, decision to publish or preparation of the manuscript.
@@ -56,7 +55,7 @@ source activate all_causes_deaths
 ```
 
 ## Reproducing our Analyses
-All mortality data, natality data, population data and household data are public available from NCHS Vital Statistics portal. All publicly available data for this paper were stored in [Zenodo](https://zenodo.org/records/11423744).
+All mortality data, natality data, population data and household data are publicly available from NCHS Vital Statistics portal. All publicly available data for this paper were stored in [Zenodo](https://zenodo.org/records/11423744).
 
 ### Preprocessing steps
 #### Mortality data
